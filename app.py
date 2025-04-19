@@ -144,7 +144,7 @@ def sms_reply():
         else:
             resp.message("Por favor, responda com 'Yes' para confirmar ou 'No' para cancelar.")
 
-        return Response(str(resp), mimetype="application/xml"))
+        return Response(str(resp), mimetype="application/xml")
 
     # 3️⃣ Se nada for encontrado
     resp.message("Não encontramos um agendamento ou convite ativo para esse número.")
