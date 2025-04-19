@@ -4,6 +4,7 @@ from supabase import create_client, Client as SupabaseClient
 from twilio.rest import Client as TwilioClient
 from datetime import datetime, timedelta
 import os
+from flask import Response
 
 # CONFIGURAÇÕES
 app = Flask(__name__)
@@ -61,7 +62,7 @@ def sms_reply():
             resp.message("Tudo bem, seu agendamento original continua reservado.")
         else:
             resp.message("Por favor, responda com 'Yes' ou 'No'.")
-        return str(resp)
+        return Response(str(resp), mimetype="application/xml")
 
     # 2️⃣ Se não for encaixe, tenta pegar agendamento comum
     agendamento_padrao = supabase.table("agendamentos") \
@@ -143,11 +144,11 @@ def sms_reply():
         else:
             resp.message("Por favor, responda com 'Yes' para confirmar ou 'No' para cancelar.")
 
-        return str(resp)
+        return Response(str(resp), mimetype="application/xml"))
 
     # 3️⃣ Se nada for encontrado
     resp.message("Não encontramos um agendamento ou convite ativo para esse número.")
-    return str(resp)
+    return Response(str(resp), mimetype="application/xml")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
