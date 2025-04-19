@@ -79,7 +79,13 @@ def sms_reply():
 
         print("📌 Agendamento normal detectado:", agendamento)
 
-        if msg_body == "no":
+        if msg_body == "yes":
+            supabase.table("agendamentos").update({
+                "status": "Confirmado"
+            }).eq("cod_id", cod_id).execute()
+            resp.message("Agendamento confirmado com sucesso. Até lá! 😉")
+
+        elif msg_body == "no":
             # 1. Cancela o agendamento original
             supabase.table("agendamentos").update({
                 "status": "Cancelado"
@@ -130,9 +136,8 @@ def sms_reply():
                 supabase.table("agendamentos").update({
                     "convite_ativo": True,
                     "tentativa_convite_em": agora.isoformat(),
-                    "user_phone": telefone  # ← Agora salva o telefone corretamente
+                    "user_phone": telefone
                 }).eq("cod_id", novo["cod_id"]).execute()
-
             else:
                 print("⚠️ Nenhum cliente na fila de espera.")
         else:
@@ -147,3 +152,4 @@ def sms_reply():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
