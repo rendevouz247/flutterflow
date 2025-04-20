@@ -16,10 +16,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 twilio_client = TwilioClient(TWILIO_SID, TWILIO_AUTH)
 openai = OpenAI(api_key=OPENAI_KEY)
 
-# Nome padrão do atendente virtual
-ATENDENTE_VIRTUAL = "Assistente da Equipe"
+ATENDENTE_VIRTUAL = "Assistant Virtuel de la Clinique"
 
-# Busca agendamentos com data em 3 dias
+# Busca agendamentos com data em 3 dias e sms_3dias = false
 response = supabase.table("agendamentos") \
     .select("*") \
     .eq("sms_3dias", False) \
@@ -32,25 +31,22 @@ for agendamento in response.data:
     agendamento_data = date.fromisoformat(agendamento["date"]).toordinal()
 
     if agendamento_data == data_alvo:
-        nome_cliente = agendamento.get("user_name", "cliente")
+        nome_cliente = agendamento.get("user_name", "client")
         telefone = agendamento["user_phone"]
         data = agendamento["date"]
         hora = agendamento["horas"]
         nome_atendente = agendamento.get("nome_atendente", "")
-        company_name = agendamento.get("company_name", "nossa empresa")
+        company_name = agendamento.get("company_name", "notre entreprise")
 
-        # Gera mensagem com IA multilíngue
+        # Gera mensagem em francês com aviso multilíngue
         prompt = f"""
-Você é um atendente virtual chamado {ATENDENTE_VIRTUAL}, da empresa {company_name}.
+Tu es un assistant virtuel nommé {ATENDENTE_VIRTUAL}, travaillant pour {company_name}.
 
-Seu cliente se chama {nome_cliente}, e tem uma consulta agendada para o dia {data} às {hora}, com {nome_atendente}.
-Gere uma mensagem educada e simpática lembrando da consulta e pedindo confirmação.
+Ton client s'appelle {nome_cliente} et a un rendez-vous prévu le {data} à {hora} avec {nome_atendente}.
+Rédige un message courtois en français rappelant le rendez-vous et demandant une confirmation.
 
-Importante:
-- A mensagem deve ter no máximo 3 linhas
-- Escreva no idioma do cliente (baseado no nome se conseguir)
-- Use tom amigável
-- Peça para o cliente responder SIM para confirmar ou NÃO para cancelar (sem ser robótico)
+À la fin, ajoute une phrase indiquant que le client peut répondre dans n'importe quelle langue, car tu parles 2335 langues.
+Le message doit contenir 3 à 4 lignes maximum.
 """
 
         completion = openai.chat.completions.create(
@@ -62,19 +58,18 @@ Importante:
 
         print(f"✅ IA gerou a mensagem para {nome_cliente}: {mensagem_ia}")
 
-        # Envia SMS com mensagem da IA
+        # Envia SMS
         twilio_client.messages.create(
             body=mensagem_ia,
             from_=TWILIO_PHONE,
             to=telefone
         )
 
-        # Atualiza sms_3dias = true
+        # Atualiza agendamento
         supabase.table("agendamentos").update({
             "sms_3dias": True,
             "user_phone": telefone
         }).eq("cod_id", agendamento["cod_id"]).execute()
-
 
         print(f"📤 SMS enviado para {telefone}")
 
