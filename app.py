@@ -80,14 +80,13 @@ def sms_reply():
             texto = f"{texto_ia}\n\nAqui estão alguns horários disponíveis para você:\n\n"
             texto += "\n".join(sugestoes)
             texto += "\n\nDeseja escolher um desses ou prefere outro dia/hora específico?"
-            print("📤 TEXTO FINAL:", texto, flush=True)
-
             mensagem_final = texto.replace("\n", " ").strip()
-            mensagem_final = mensagem_final[:1500]  # Aplica o corte só depois de limpar
-
+            mensagem_final = mensagem_final[:800]
+            
+            print("📦 MENSAGEM ENVIADA AO TWILIO:", mensagem_final, flush=True)
+            
             resp.message(mensagem_final)
 
-            resp.message(texto)
 
         return Response(str(resp), content_type="text/xml; charset=utf-8")
 
