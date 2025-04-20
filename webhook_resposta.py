@@ -24,13 +24,13 @@ response = supabase.table("agendamentos") \
     .eq("sms_3dias", False) \
     .execute()
 
-hoje = date.today()
-data_alvo = hoje.toordinal() + 3
+data_hoje = hoje.toordinal()
+data_limite = hoje.toordinal() + 3
 
 for agendamento in response.data:
     agendamento_data = date.fromisoformat(agendamento["date"]).toordinal()
 
-    if agendamento_data == data_alvo:
+    if data_hoje <= agendamento_data <= data_limite:
         nome_cliente = agendamento.get("user_name", "client")
         telefone = agendamento["user_phone"]
         data = agendamento["date"]
