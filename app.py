@@ -81,9 +81,14 @@ def sms_reply():
             texto += "\n".join(sugestoes)
             texto += "\n\nDeseja escolher um desses ou prefere outro dia/hora específico?"
             print("📤 TEXTO FINAL:", texto, flush=True)
+
+            mensagem_final = texto[:1500]  # Limita a resposta a 1500 caracteres (Twilio aceita até ~1600)
+            mensagem_final = mensagem_final.replace(\"\\n\", \" \")  # Remove quebras de linha para garantir XML limpo
+            resp.message(mensagem_final)
+
             resp.message(texto)
 
-        return Response(str(resp), mimetype="application/xml")
+        return Response(str(resp), content_type=\"text/xml; charset=utf-8\")
 
     resp.message("Não encontramos um agendamento ou convite ativo para esse número.")
     return Response(str(resp), mimetype="application/xml")
