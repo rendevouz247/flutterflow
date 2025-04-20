@@ -71,8 +71,10 @@ Importante:
 
         # Atualiza sms_3dias = true
         supabase.table("agendamentos").update({
-            "sms_3dias": True
+            "sms_3dias": True,
+            "user_phone": telefone
         }).eq("cod_id", agendamento["cod_id"]).execute()
+
 
         print(f"📤 SMS enviado para {telefone}")
 
