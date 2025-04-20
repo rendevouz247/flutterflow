@@ -24,6 +24,7 @@ response = supabase.table("agendamentos") \
     .eq("sms_3dias", False) \
     .execute()
 
+hoje = date.today()
 data_hoje = hoje.toordinal()
 data_limite = hoje.toordinal() + 3
 
