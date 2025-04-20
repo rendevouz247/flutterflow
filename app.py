@@ -3,7 +3,7 @@ from twilio.twiml.messaging_response import MessagingResponse
 from supabase import create_client, Client as SupabaseClient
 from twilio.rest import Client as TwilioClient
 from openai import OpenAI
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import os
 
 app = Flask(__name__)
@@ -22,15 +22,11 @@ client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
 
 @app.route("/sms", methods=["POST"])
 def sms_reply():
-    msg_body = request.form.get("Body", "").strip().lower()
+    msg_body = request.form.get("Body", "").strip()
     from_number = request.form.get("From")
     resp = MessagingResponse()
-
-    print(f"\U0001F4E8 Mensagem recebida: {msg_body} de {from_number}")
-
     agora = datetime.utcnow()
 
-    # 1️⃣ Verifica se é um encaixe ativo
     result = supabase.table("agendamentos") \
         .select("*") \
         .eq("user_phone", from_number) \
@@ -45,7 +41,7 @@ def sms_reply():
         tentativa_em = datetime.fromisoformat(agendamento["tentativa_convite_em"])
         tempo_limite = tentativa_em + timedelta(hours=2)
 
-        if msg_body == "yes":
+        if msg_body.lower() == "yes":
             if agora <= tempo_limite:
                 supabase.table("agendamentos").update({
                     "status": "Confirmado",
@@ -57,7 +53,7 @@ def sms_reply():
                     "convite_ativo": False
                 }).eq("cod_id", cod_id).execute()
                 resp.message("Esse encaixe não está mais disponível. Seu agendamento original continua reservado.")
-        elif msg_body == "no":
+        elif msg_body.lower() == "no":
             supabase.table("agendamentos").update({
                 "convite_ativo": False
             }).eq("cod_id", cod_id).execute()
@@ -66,7 +62,7 @@ def sms_reply():
             resposta = client.chat.completions.create(
                 model="llama3-70b-8192",
                 messages=[
-                    {"role": "system", "content": "Você é um atendente virtual multilíngue e educado."},
+                    {"role": "system", "content": "Você é um atendente multilíngue simpático que ajuda clientes a remarcar consultas e esclarecer dúvidas."},
                     {"role": "user", "content": msg_body}
                 ]
             )
@@ -75,7 +71,6 @@ def sms_reply():
 
         return Response(str(resp), mimetype="application/xml")
 
-    # 2️⃣ Verifica agendamento normal
     agendamento_padrao = supabase.table("agendamentos") \
         .select("*") \
         .eq("user_phone", from_number) \
@@ -89,10 +84,8 @@ def sms_reply():
         cod_id = agendamento["cod_id"]
         company_id = agendamento["company_id"]
 
-        if msg_body == "no":
-            supabase.table("agendamentos").update({
-                "status": "Cancelado"
-            }).eq("cod_id", cod_id).execute()
+        if msg_body.lower() == "no":
+            supabase.table("agendamentos").update({"status": "Cancelado"}).eq("cod_id", cod_id).execute()
             resp.message("Consulta cancelada. Obrigado por avisar!")
 
             fila = supabase.table("agendamentos") \
@@ -108,13 +101,7 @@ def sms_reply():
             if fila.data:
                 novo = fila.data[0]
                 user_id = novo["user_id"]
-
-                user_info = supabase.table("tab_user") \
-                    .select("name, phone") \
-                    .eq("user_id", user_id) \
-                    .limit(1) \
-                    .execute()
-
+                user_info = supabase.table("tab_user").select("name, phone").eq("user_id", user_id).limit(1).execute()
                 nome = user_info.data[0]["name"]
                 telefone = user_info.data[0]["phone"]
                 data = novo["date"]
@@ -124,8 +111,6 @@ def sms_reply():
                     f"Olá {nome}, surgiu uma vaga para antecipar sua consulta para {data} às {hora}. "
                     "Responda YES para aceitar ou NO para manter seu horário original."
                 )
-
-                print(f"\U0001F4E4 Enviando SMS para {nome} - {telefone}")
 
                 twilio_client.messages.create(
                     body=mensagem,
@@ -138,27 +123,24 @@ def sms_reply():
                     "tentativa_convite_em": agora.isoformat(),
                     "user_phone": telefone
                 }).eq("cod_id", novo["cod_id"]).execute()
-            else:
-                print("⚠️ Nenhum cliente na fila de espera.")
-        elif msg_body == "yes":
-            supabase.table("agendamentos").update({
-                "status": "Confirmado"
-            }).eq("cod_id", cod_id).execute()
+        elif msg_body.lower() == "yes":
+            supabase.table("agendamentos").update({"status": "Confirmado"}).eq("cod_id", cod_id).execute()
             resp.message("Perfeito! Consulta confirmada. Nos vemos em breve! 🩺")
         else:
-            resposta = client.chat.completions.create(
-                model="llama3-70b-8192",
-                messages=[
-                    {"role": "system", "content": "Você é um atendente virtual multilíngue e educado."},
-                    {"role": "user", "content": msg_body}
-                ]
-            )
-            texto_ia = resposta.choices[0].message.content.strip()
-            resp.message(texto_ia)
+            horarios_disponiveis = supabase.table("view_horas_disponiveis").select("date, horas_disponiveis").eq("company_id", company_id).order("date").limit(3).execute()
+            sugestoes = []
+            for item in horarios_disponiveis.data:
+                data_label = item["date"]
+                horas = item["horas_disponiveis"]["horarios"][:3]
+                sugestoes.append(f"{data_label}: {', '.join(horas)}")
+
+            texto = "Encontrei alguns horários disponíveis para você:\n\n"
+            texto += "\n".join(sugestoes)
+            texto += "\n\nDeseja escolher um desses ou prefere outro dia/hora específico?"
+            resp.message(texto)
 
         return Response(str(resp), mimetype="application/xml")
 
-    # 3️⃣ Nenhum agendamento encontrado
     resp.message("Não encontramos um agendamento ou convite ativo para esse número.")
     return Response(str(resp), mimetype="application/xml")
 
@@ -166,8 +148,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
 
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
 
