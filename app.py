@@ -91,7 +91,17 @@ def sms_reply():
             print("⚠️ Erro ao processar nova data/hora:", e, file=sys.stderr, flush=True)
 
     # Multilíngue: detecta idioma
-    idioma = GoogleTranslator(source='auto', target='en').detect(msg_body)
+    
+    idioma = GoogleTranslator(source='auto', target='en').translate(msg_body)
+    if "Olá" in msg_body or "consulta" in msg_body or "preferido" in msg_body:
+        idioma_detectado = "pt"
+    elif "Bonjour" in msg_body or "rendez-vous" in msg_body:
+        idioma_detectado = "fr"
+    elif "Hola" in msg_body or "cita" in msg_body:
+        idioma_detectado = "es"
+    else:
+        idioma_detectado = "en"
+
     idioma_destino = idioma if idioma in ["en", "es", "fr", "pt"] else "en"
 
     try:
