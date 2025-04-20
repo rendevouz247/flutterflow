@@ -51,14 +51,9 @@ def sms_reply():
 
         else:
             try:
-                resposta = client.chat.completions.create(
-                    model="llama3-70b-8192",
-                    messages=[
-                        {"role": "system", "content": "Você é um atendente multilíngue simpático que ajuda clientes a remarcar consultas, esclarecer dúvidas e sugerir novos horários."},
-                        {"role": "user", "content": msg_body}
-                    ]
-                )
-                texto_ia = resposta.choices[0].message.content.strip()
+                texto_ia = "Olá! Entendi sua pergunta. Aqui vão alguns horários disponíveis:"
+                print("🧠 SIMULAÇÃO IA FUNCIONANDO", flush=True)
+
                 print("🧠 IA RESPONDEU:", texto_ia)
             except Exception as e:
                 print("❌ ERRO COM IA:", e, file=sys.stderr, flush=True)
