@@ -45,7 +45,7 @@ def sms_reply():
     cod_id = agendamento["cod_id"]
     status = agendamento["status"]
     company_id = agendamento["company_id"]
-    nome_cliente = agendamento.get("nome_cliente", "cliente")
+    nome_cliente = agendamento.get("nome_cliente", "Cliente")
     nome_atendente = agendamento.get("nome_atendente", "atendente")
 
     if msg_body.lower() == "yes":
@@ -58,7 +58,6 @@ def sms_reply():
         resp.message("Consulta cancelada. Obrigado por avisar!")
         return Response(str(resp), content_type="text/xml; charset=utf-8")
 
-    # Tenta extrair data e hora da mensagem do cliente
     padrao_data = re.search(r"(\d{2}/\d{2})", msg_body)
     padrao_hora = re.search(r"(\d{1,2}[:h]\d{2})", msg_body)
 
@@ -90,23 +89,8 @@ def sms_reply():
         except Exception as e:
             print("⚠️ Erro ao processar nova data/hora:", e, file=sys.stderr, flush=True)
 
-    # Multilíngue: detecta idioma
-    
-    idioma = GoogleTranslator(source='auto', target='en').translate(msg_body)
-    if "Olá" in msg_body or "consulta" in msg_body or "preferido" in msg_body:
-        idioma_detectado = "pt"
-    elif "Bonjour" in msg_body or "rendez-vous" in msg_body:
-        idioma_detectado = "fr"
-    elif "Hola" in msg_body or "cita" in msg_body:
-        idioma_detectado = "es"
-    else:
-        idioma_detectado = "en"
-
-    idioma_destino = idioma if idioma in ["en", "es", "fr", "pt"] else "en"
-
     try:
-        system_prompt = f"You are a professional, multilingual virtual assistant. Be brief, clear, helpful and friendly. Include the name of the client ({nome_cliente}) and the attendant ({nome_atendente}) in responses."
-
+        system_prompt = f"You are a professional, multilingual virtual assistant. Be brief, clear, helpful and friendly."
         resposta = client.chat.completions.create(
             model="llama3-70b-8192",
             messages=[
@@ -118,7 +102,7 @@ def sms_reply():
         print("🧠 IA RESPONDEU:", texto_ia, flush=True)
     except Exception as e:
         print("❌ ERRO COM IA:", e, file=sys.stderr, flush=True)
-        texto_ia = "Desculpe, tivemos um problema ao buscar os horários."
+        texto_ia = "Olá! Tudo certo. Vamos verificar juntos os melhores horários pra você."
 
     horarios_disponiveis = supabase.table("view_horas_disponiveis") \
         .select("date, horas_disponiveis") \
@@ -133,17 +117,16 @@ def sms_reply():
         horas = item["horas_disponiveis"].get("disponiveis", [])[:3]
         sugestoes.append(f"{data_label}: {', '.join(horas)}")
 
-    texto = f"{texto_ia}\n\n📅 Aqui estão alguns horários disponíveis para você:\n\n"
+    texto = f"Olá {nome_cliente}, {texto_ia}\n\nTemos alguns horários disponíveis:\n\n"
     texto += "\n".join(sugestoes)
     texto += "\n\nDeseja escolher um desses ou prefere outro dia/hora específico? 😊"
 
     mensagem_final = texto.replace("\n", " • ").strip()[:800]
-
     print("📦 MENSAGEM ENVIADA AO TWILIO:", mensagem_final, flush=True)
+
     resp.message(mensagem_final)
     return Response(str(resp), content_type="text/xml; charset=utf-8")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
