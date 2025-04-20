@@ -54,13 +54,14 @@ Le message doit contenir 3 à 4 lignes maximum.
 """
 
         completion = client.chat.completions.create(
-            model="mixtral-8x7b-32768",  # ou "llama3-8b-8192"
+            model="llama3-70b-8192",
             messages=[
-                {"role": "system", "content": "Você é um atendente multilíngue educado e simpático."},
+                {"role": "system", "content": "Você é um atendente multilíngue e educado."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7
         )
+
         
         mensagem_ia = completion.choices[0].message.content.strip()
 
