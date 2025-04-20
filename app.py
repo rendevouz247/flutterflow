@@ -99,22 +99,26 @@ def sms_reply():
         print("❌ ERRO COM IA:", e, file=sys.stderr, flush=True)
         texto_ia = "Olá! Tudo certo. Vamos verificar juntos os melhores horários pra você."
 
-    horarios_disponiveis = supabase.table("view_horas_disponiveis") \
-        .select("date, horas_disponiveis") \
-        .eq("company_id", company_id) \
-        .order("date") \
-        .limit(3) \
-        .execute()
+    texto = f"Olá {nome_cliente}, {texto_ia}"
 
-    sugestoes = []
-    for item in horarios_disponiveis.data:
-        data_label = item["date"]
-        horas = item["horas_disponiveis"].get("disponiveis", [])[:3]
-        sugestoes.append(f"{data_label}: {', '.join(horas)}")
+    # Só adiciona sugestões se IA não indicou uma data/hora
+    if not re.search(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}|\d{2}:\d{2}", texto_ia):
+        horarios_disponiveis = supabase.table("view_horas_disponiveis") \
+            .select("date, horas_disponiveis") \
+            .eq("company_id", company_id) \
+            .order("date") \
+            .limit(3) \
+            .execute()
 
-    texto = f"Olá {nome_cliente}, {texto_ia}\n\nTemos alguns horários disponíveis:\n\n"
-    texto += "\n".join(sugestoes)
-    texto += "\n\nDeseja escolher um desses ou prefere outro dia/hora específico? 😊"
+        sugestoes = []
+        for item in horarios_disponiveis.data:
+            data_label = item["date"]
+            horas = item["horas_disponiveis"].get("disponiveis", [])[:3]
+            sugestoes.append(f"{data_label}: {', '.join(horas)}")
+
+        texto += "\n\nTemos alguns horários disponíveis:\n\n"
+        texto += "\n".join(sugestoes)
+        texto += "\n\nDeseja escolher um desses ou prefere outro dia/hora específico? 😊"
 
     mensagem_final = texto.replace("\n", " • ").strip()[:800]
     print("📦 MENSAGEM ENVIADA AO TWILIO:", mensagem_final, flush=True)
