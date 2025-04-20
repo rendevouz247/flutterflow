@@ -82,8 +82,9 @@ def sms_reply():
             texto += "\n\nDeseja escolher um desses ou prefere outro dia/hora específico?"
             print("📤 TEXTO FINAL:", texto, flush=True)
 
-            mensagem_final = texto[:1500]  # Limita a resposta a 1500 caracteres (Twilio aceita até ~1600)
-            mensagem_final = mensagem_final.replace("\n", " ") # Remove quebras de linha para garantir XML limpo
+            mensagem_final = texto.replace("\n", " ").strip()
+            mensagem_final = mensagem_final[:1500]  # Aplica o corte só depois de limpar
+
             resp.message(mensagem_final)
 
             resp.message(texto)
