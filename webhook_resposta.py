@@ -16,7 +16,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 twilio_client = TwilioClient(TWILIO_SID, TWILIO_AUTH)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-ATENDENTE_VIRTUAL = "Assistant Virtuel de la Clinique"
+ATENDENTE_VIRTUAL = "247.NET"
 
 # Busca agendamentos com data em 3 dias e sms_3dias = false
 response = supabase.table("agendamentos") \
