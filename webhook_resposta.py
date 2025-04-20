@@ -50,12 +50,15 @@ Rédige un message courtois en français rappelant le rendez-vous et demandant u
 Le message doit contenir 3 à 4 lignes maximum.
 """
 
-        completion = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}]
+        completion = openai.Completion.create(
+            model="text-davinci-003",
+            prompt=prompt,
+            max_tokens=200,
+            temperature=0.7
         )
         
-        mensagem_ia = completion.choices[0].message["content"].strip()
+        mensagem_ia = completion.choices[0].text.strip()
+
 
 
         print(f"✅ IA gerou a mensagem para {nome_cliente}: {mensagem_ia}")
