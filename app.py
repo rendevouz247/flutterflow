@@ -67,6 +67,7 @@ def sms_reply():
                 ]
             )
             texto_ia = resposta.choices[0].message.content.strip()
+            print("🧠 RESPOSTA IA:", texto_ia)
             resp.message(texto_ia)
 
         return Response(str(resp), mimetype="application/xml")
