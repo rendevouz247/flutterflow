@@ -58,14 +58,17 @@ def sms_reply():
         resp.message("Consulta cancelada. Obrigado por avisar!")
         return Response(str(resp), content_type="text/xml; charset=utf-8")
 
-    padrao_data = re.search(r"(\d{2}/\d{2})", msg_body)
-    padrao_hora = re.search(r"(\d{1,2}[:h]\d{2})", msg_body)
+    # Detectar tentativa de remarcação com nova data/hora
+    padrao_data = re.search(r"(\d{2})[\/\-](\d{2})", msg_body)
+    padrao_hora = re.search(r"(\d{1,2})[:h](\d{2})", msg_body)
 
     if padrao_data and padrao_hora:
         try:
-            data_str = padrao_data.group(1) + f"/{datetime.now().year}"
-            data_formatada = datetime.strptime(data_str, "%d/%m/%Y").date()
-            hora_bruta = padrao_hora.group(1).replace("h", ":") + ":01"
+            dia, mes = padrao_data.groups()
+            hora, minuto = padrao_hora.groups()
+            ano = datetime.now().year
+            data_formatada = datetime.strptime(f"{dia}/{mes}/{ano}", "%d/%m/%Y").date()
+            hora_formatada = f"{hora.zfill(2)}:{minuto.zfill(2)}:01"
 
             horarios = supabase.table("view_horas_disponiveis") \
                 .select("*") \
@@ -74,18 +77,23 @@ def sms_reply():
                 .execute()
 
             for linha in horarios.data:
-                if hora_bruta in linha["horas_disponiveis"]["disponiveis"]:
-                    msg_confirmacao = f"Olá {nome_cliente}, posso agendar então para o dia {data_formatada.strftime('%d/%m/%Y')} às {hora_bruta[:5]} com {nome_atendente}? Por favor, responda com YES para confirmar ou NO para cancelar."
-                    resp.message(msg_confirmacao)
+                if hora_formatada in linha["horas_disponiveis"].get("disponiveis", []):
+                    msg = (
+                        f"Olá {nome_cliente}, posso agendar então para o dia {data_formatada.strftime('%d/%m/%Y')} "
+                        f"às {hora_formatada[:5]} com {nome_atendente}?\n\nResponda com YES para confirmar ou NO para manter como está."
+                    )
+                    resp.message(msg)
                     return Response(str(resp), content_type="text/xml; charset=utf-8")
 
             resp.message("Este horário não está mais disponível. Deseja que eu sugira outros?")
             return Response(str(resp), content_type="text/xml; charset=utf-8")
+
         except Exception as e:
             print("⚠️ Erro ao processar nova data/hora:", e, file=sys.stderr, flush=True)
 
+    # IA entra em ação se não houver data/hora na mensagem
     try:
-        system_prompt = f"Você é um atendente virtual multilíngue profissional e gentil. Responda de forma curta, clara e amigável, sempre em português."
+        system_prompt = "Você é um assistente virtual multilíngue e profissional. Responda sempre em português, de forma clara e direta."
         resposta = client.chat.completions.create(
             model="llama3-70b-8192",
             messages=[
@@ -101,8 +109,7 @@ def sms_reply():
 
     texto = f"Olá {nome_cliente}, {texto_ia}"
 
-    # Só adiciona sugestões se IA não indicou uma data/hora
-    if not re.search(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}|\d{2}:\d{2}", texto_ia):
+    if not re.search(r"\d{2}/\d{2}|\d{2}:\d{2}", texto_ia):
         horarios_disponiveis = supabase.table("view_horas_disponiveis") \
             .select("date, horas_disponiveis") \
             .eq("company_id", company_id) \
