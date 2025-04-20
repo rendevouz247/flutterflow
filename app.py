@@ -88,7 +88,7 @@ def sms_reply():
 
             resp.message(texto)
 
-        return Response(str(resp), content_type=\"text/xml; charset=utf-8\")
+        return Response(str(resp), content_type="text/xml; charset=utf-8")
 
     resp.message("Não encontramos um agendamento ou convite ativo para esse número.")
     return Response(str(resp), mimetype="application/xml")
