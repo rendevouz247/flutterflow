@@ -137,6 +137,8 @@ def sms_reply():
             texto = "Encontrei alguns horários disponíveis para você:\n\n"
             texto += "\n".join(sugestoes)
             texto += "\n\nDeseja escolher um desses ou prefere outro dia/hora específico?"
+            print(texto)
+            
             resp.message(texto)
 
         return Response(str(resp), mimetype="application/xml")
