@@ -77,22 +77,24 @@ def sms_reply():
                 horas = item["horas_disponiveis"].get("disponiveis", [])[:3]
                 sugestoes.append(f"{data_label}: {', '.join(horas)}")
 
-            texto = f"{texto_ia}\n\nAqui estão alguns horários disponíveis para você:\n\n"
+            # Monta texto bonito com quebra visual
+            texto = f"{texto_ia}\n\n📅 Aqui estão alguns horários disponíveis para você:\n\n"
             texto += "\n".join(sugestoes)
-            texto += "\n\nDeseja escolher um desses ou prefere outro dia/hora específico?"
-            mensagem_final = texto.replace("\n", " ").strip()
-            mensagem_final = mensagem_final[:800]
-            
-            print("📦 MENSAGEM ENVIADA AO TWILIO:", mensagem_final, flush=True)
-            
-            resp.message(mensagem_final)
+            texto += "\n\nDeseja escolher um desses ou prefere outro dia/hora específico? 😊"
 
+            # Limpa e corta com formatação segura para SMS
+            mensagem_final = texto.replace("\n", " • ").strip()
+            mensagem_final = mensagem_final[:800]
+
+            print("📦 MENSAGEM ENVIADA AO TWILIO:", mensagem_final, flush=True)
+            resp.message(mensagem_final)
 
         return Response(str(resp), content_type="text/xml; charset=utf-8")
 
     resp.message("Não encontramos um agendamento ou convite ativo para esse número.")
-    return Response(str(resp), mimetype="application/xml")
+    return Response(str(resp), content_type="text/xml; charset=utf-8")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
