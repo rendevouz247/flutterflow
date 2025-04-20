@@ -45,52 +45,66 @@ def sms_reply():
     cod_id = agendamento["cod_id"]
     status = agendamento["status"]
     company_id = agendamento["company_id"]
-    nome_cliente = agendamento.get("nome_cliente", "")
-    nome_atendente = agendamento.get("nome_atendente", "")
+    nome_cliente = agendamento.get("nome_cliente", "Cliente")
+    nome_atendente = agendamento.get("nome_atendente", "atendente")
 
     if msg_body.lower() == "yes":
+        novo_agendamento = agendamento.get("nova_data_confirmacao")
+        if novo_agendamento:
+            data_nova = novo_agendamento["data"]
+            hora_nova = novo_agendamento["hora"]
+            supabase.table("agendamentos").update({
+                "status": "Confirmado",
+                "date": data_nova,
+                "horas": hora_nova,
+                "nova_data_confirmacao": None
+            }).eq("cod_id", cod_id).execute()
+            resp.message(f"Confirmado para {data_nova} às {hora_nova[:5]} com {nome_atendente}! 😉")
+            return Response(str(resp), content_type="text/xml; charset=utf-8")
+
         supabase.table("agendamentos").update({"status": "Confirmado"}).eq("cod_id", cod_id).execute()
-        resp.message(f"Perfeito! Consulta confirmada com {nome_atendente}. Até lá! 🩺")
+        resp.message(f"Perfeito, {nome_cliente}! Consulta confirmada com {nome_atendente}. Até lá! 🩺")
         return Response(str(resp), content_type="text/xml; charset=utf-8")
 
     if msg_body.lower() == "no":
-        supabase.table("agendamentos").update({"status": "Cancelado"}).eq("cod_id", cod_id).execute()
+        supabase.table("agendamentos").update({"status": "Cancelado", "nova_data_confirmacao": None}).eq("cod_id", cod_id).execute()
         resp.message("Consulta cancelada. Obrigado por avisar!")
         return Response(str(resp), content_type="text/xml; charset=utf-8")
 
-    padrao_data = re.search(r"(\d{2}/\d{2})", msg_body)
-    padrao_hora = re.search(r"(\d{1,2}[:h]\d{2})", msg_body)
+    padrao_data = re.search(r"(\d{1,2})[\/-](\d{1,2})", msg_body)
+    padrao_hora = re.search(r"(\d{1,2})[:h](\d{2})", msg_body)
 
-    if padrao_data and padrao_hora:
-        try:
-            data_str = padrao_data.group(1) + f"/{datetime.now().year}"
-            data_formatada = datetime.strptime(data_str, "%d/%m/%Y").date()
-            hora_bruta = padrao_hora.group(1).replace("h", ":") + ":01"
+    horarios_disponiveis = supabase.table("view_horas_disponiveis") \
+        .select("date, horas_disponiveis") \
+        .eq("company_id", company_id) \
+        .order("date") \
+        .limit(3) \
+        .execute()
 
-            horarios = supabase.table("view_horas_disponiveis") \
-                .select("*") \
-                .eq("company_id", company_id) \
-                .eq("date", data_formatada.isoformat()) \
-                .execute()
+    sugestoes = []
+    horario_encontrado = None
+    for item in horarios_disponiveis.data:
+        data_label = item["date"]
+        horas = item["horas_disponiveis"].get("disponiveis", [])[:3]
+        sugestoes.append(f"📅 {data_label[8:10]}/{data_label[5:7]}: {', '.join(horas)}")
 
-            for linha in horarios.data:
-                if hora_bruta in linha["horas_disponiveis"]["disponiveis"]:
-                    supabase.table("agendamentos").update({
-                        "status": "Confirmado",
-                        "date": data_formatada.isoformat(),
-                        "horas": hora_bruta
-                    }).eq("cod_id", cod_id).execute()
+        if padrao_data and padrao_hora:
+            dia, mes = padrao_data.groups()
+            hora, minuto = padrao_hora.groups()
+            data_candidata = f"2025-{int(mes):02d}-{int(dia):02d}"
+            hora_candidata = f"{int(hora):02d}:{int(minuto):02d}:01"
 
-                    resp.message(f"Feito! Consulta remarcada para {data_formatada.strftime('%d/%m')} às {hora_bruta[:5]} com {nome_atendente} ✅")
-                    return Response(str(resp), content_type="text/xml; charset=utf-8")
+            if data_label == data_candidata and hora_candidata in item["horas_disponiveis"].get("disponiveis", []):
+                horario_encontrado = {"data": data_candidata, "hora": hora_candidata}
 
-            resp.message("Esse horário não está disponível. Quer que eu sugira outros?")
-            return Response(str(resp), content_type="text/xml; charset=utf-8")
-        except Exception as e:
-            print("⚠️ Erro ao processar nova data/hora:", e, file=sys.stderr, flush=True)
+    if horario_encontrado:
+        supabase.table("agendamentos").update({"nova_data_confirmacao": horario_encontrado}).eq("cod_id", cod_id).execute()
+        texto = f"Achei o horário {horario_encontrado['data'][8:10]}/{horario_encontrado['data'][5:7]} às {horario_encontrado['hora'][:5]}. Posso confirmar pra você? Responda YES pra confirmar."
+        resp.message(texto)
+        return Response(str(resp), content_type="text/xml; charset=utf-8")
 
     try:
-        system_prompt = "Você é um atendente virtual direto e objetivo. Responda como se estivesse no WhatsApp com um cliente, de forma natural e clara."
+        system_prompt = "Você é um atendente virtual profissional, claro, simpático e direto."
         resposta = client.chat.completions.create(
             model="llama3-70b-8192",
             messages=[
@@ -102,22 +116,10 @@ def sms_reply():
         print("🧠 IA RESPONDEU:", texto_ia, flush=True)
     except Exception as e:
         print("❌ ERRO COM IA:", e, file=sys.stderr, flush=True)
-        texto_ia = "Tranquilo! Me diz o que você precisa e vejo aqui pra você."
+        texto_ia = "Oi! Tudo bem? Aqui estão alguns horários pra você escolher."
 
-    horarios_disponiveis = supabase.table("view_horas_disponiveis") \
-        .select("date, horas_disponiveis") \
-        .eq("company_id", company_id) \
-        .order("date") \
-        .limit(3) \
-        .execute()
-
-    sugestoes = []
-    for item in horarios_disponiveis.data:
-        data_label = datetime.strptime(item["date"], "%Y-%m-%d").strftime("%d/%m")
-        horas = item["horas_disponiveis"].get("disponiveis", [])[:3]
-        sugestoes.append(f"📅 {data_label}: {', '.join(horas)}")
-
-    texto = f"{texto_ia}\n\nAqui vão uns horários disponíveis pra você:\n\n"
+    texto = f"{texto_ia}"
+    texto += "\n\nAqui vão uns horários disponíveis pra você:\n\n"
     texto += "\n".join(sugestoes)
     texto += "\n\nQuer que eu reserve um desses? Ou prefere outro? 😊"
 
