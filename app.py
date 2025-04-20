@@ -131,7 +131,7 @@ def sms_reply():
             sugestoes = []
             for item in horarios_disponiveis.data:
                 data_label = item["date"]
-                horas = item["horas_disponiveis"]["horarios"][:3]
+                horas = item["horas_disponiveis"]["disponiveis"][:3]
                 sugestoes.append(f"{data_label}: {', '.join(horas)}")
 
             texto = "Encontrei alguns horários disponíveis para você:\n\n"
