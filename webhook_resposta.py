@@ -1,6 +1,6 @@
 import os
 from datetime import date
-import OpenAI
+import openai
 from supabase import create_client, Client
 from twilio.rest import Client as TwilioClient
 
