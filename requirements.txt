@@ -1,6 +1,7 @@
 Flask==3.0.3
 twilio==8.1.0
 supabase==2.15.0
-openai==0.28.1
+openai>=1.0.0
 httpx>=0.24.1
+
 
