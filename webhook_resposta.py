@@ -1,6 +1,6 @@
 import os
 from datetime import date
-import openai
+from openai import OpenAI
 from supabase import create_client, Client
 from twilio.rest import Client as TwilioClient
 
@@ -14,7 +14,10 @@ OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 twilio_client = TwilioClient(TWILIO_SID, TWILIO_AUTH)
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(
+    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1"
+)
 
 ATENDENTE_VIRTUAL = "247.NET"
 
@@ -50,15 +53,16 @@ Rédige un message courtois en français rappelant le rendez-vous et demandant u
 Le message doit contenir 3 à 4 lignes maximum.
 """
 
-        completion = openai.Completion.create(
-            model="text-davinci-003",
-            prompt=prompt,
-            max_tokens=200,
+        completion = client.chat.completions.create(
+            model="mixtral-8x7b-32768",  # ou "llama3-8b-8192"
+            messages=[
+                {"role": "system", "content": "Você é um atendente multilíngue educado e simpático."},
+                {"role": "user", "content": prompt}
+            ],
             temperature=0.7
         )
         
-        mensagem_ia = completion.choices[0].text.strip()
-
+        mensagem_ia = completion.choices[0].message.content.strip()
 
 
         print(f"✅ IA gerou a mensagem para {nome_cliente}: {mensagem_ia}")
