@@ -75,13 +75,8 @@ def sms_reply():
 
             for linha in horarios.data:
                 if hora_bruta in linha["horas_disponiveis"]["disponiveis"]:
-                    supabase.table("agendamentos").update({
-                        "status": "Confirmado",
-                        "date": data_formatada.isoformat(),
-                        "horas": hora_bruta
-                    }).eq("cod_id", cod_id).execute()
-
-                    resp.message(f"Horário alterado com sucesso para {data_formatada.strftime('%d/%m')} às {hora_bruta[:5]} com {nome_atendente}. ✅")
+                    msg_confirmacao = f"Posso agendar então para o dia {data_formatada.strftime('%d/%m/%Y')} às {hora_bruta[:5]} com {nome_atendente}? Por favor, responda com YES para confirmar ou NO para cancelar."
+                    resp.message(msg_confirmacao)
                     return Response(str(resp), content_type="text/xml; charset=utf-8")
 
             resp.message("Este horário não está mais disponível. Deseja que eu sugira outros?")
