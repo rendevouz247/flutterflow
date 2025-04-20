@@ -45,7 +45,7 @@ def sms_reply():
     cod_id = agendamento["cod_id"]
     status = agendamento["status"]
     company_id = agendamento["company_id"]
-    nome_cliente = agendamento.get("nome_cliente", "Cliente")
+    nome_cliente = agendamento.get("user_name") or agendamento.get("nome_cliente") or "Cliente"
     nome_atendente = agendamento.get("nome_atendente", "atendente")
 
     if msg_body.lower() == "yes":
@@ -75,7 +75,7 @@ def sms_reply():
 
             for linha in horarios.data:
                 if hora_bruta in linha["horas_disponiveis"]["disponiveis"]:
-                    msg_confirmacao = f"Posso agendar então para o dia {data_formatada.strftime('%d/%m/%Y')} às {hora_bruta[:5]} com {nome_atendente}? Por favor, responda com YES para confirmar ou NO para cancelar."
+                    msg_confirmacao = f"Olá {nome_cliente}, posso agendar então para o dia {data_formatada.strftime('%d/%m/%Y')} às {hora_bruta[:5]} com {nome_atendente}? Por favor, responda com YES para confirmar ou NO para cancelar."
                     resp.message(msg_confirmacao)
                     return Response(str(resp), content_type="text/xml; charset=utf-8")
 
@@ -85,7 +85,7 @@ def sms_reply():
             print("⚠️ Erro ao processar nova data/hora:", e, file=sys.stderr, flush=True)
 
     try:
-        system_prompt = f"You are a professional, multilingual virtual assistant. Be brief, clear, helpful and friendly."
+        system_prompt = f"Você é um atendente virtual multilíngue profissional e gentil. Responda de forma curta, clara e amigável, sempre em português."
         resposta = client.chat.completions.create(
             model="llama3-70b-8192",
             messages=[
