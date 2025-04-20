@@ -7,6 +7,7 @@ from datetime import datetime
 import os
 import sys
 import re
+import random
 from deep_translator import GoogleTranslator
 
 app = Flask(__name__)
@@ -58,7 +59,6 @@ def sms_reply():
         resp.message("Consulta cancelada. Obrigado por avisar!")
         return Response(str(resp), content_type="text/xml; charset=utf-8")
 
-    # Detectar tentativa de remarcação com nova data/hora
     padrao_data = re.search(r"(\d{2})[\/\-](\d{2})", msg_body)
     padrao_hora = re.search(r"(\d{1,2})[:h](\d{2})", msg_body)
 
@@ -79,8 +79,8 @@ def sms_reply():
             for linha in horarios.data:
                 if hora_formatada in linha["horas_disponiveis"].get("disponiveis", []):
                     msg = (
-                        f"Olá {nome_cliente}, posso agendar então para o dia {data_formatada.strftime('%d/%m/%Y')} "
-                        f"às {hora_formatada[:5]} com {nome_atendente}?\n\nResponda com YES para confirmar ou NO para manter como está."
+                        f"Legal! Posso agendar então para o dia {data_formatada.strftime('%d/%m/%Y')} "
+                        f"às {hora_formatada[:5]} com {nome_atendente}. Pode ser?\n\nResponda com YES para confirmar ou NO para manter como está."
                     )
                     resp.message(msg)
                     return Response(str(resp), content_type="text/xml; charset=utf-8")
@@ -91,9 +91,8 @@ def sms_reply():
         except Exception as e:
             print("⚠️ Erro ao processar nova data/hora:", e, file=sys.stderr, flush=True)
 
-    # IA entra em ação se não houver data/hora na mensagem
     try:
-        system_prompt = "Você é um assistente virtual multilíngue e profissional. Responda sempre em português, de forma clara e direta."
+        system_prompt = "Você é um assistente virtual simpático e natural. Fale sempre em português informal. Seja direto, sem repetir coisas óbvias."
         resposta = client.chat.completions.create(
             model="llama3-70b-8192",
             messages=[
@@ -105,9 +104,17 @@ def sms_reply():
         print("🧠 IA RESPONDEU:", texto_ia, flush=True)
     except Exception as e:
         print("❌ ERRO COM IA:", e, file=sys.stderr, flush=True)
-        texto_ia = "Olá! Tudo certo. Vamos verificar juntos os melhores horários pra você."
+        texto_ia = "Claro! Me diz melhor o que você precisa e te mostro os horários disponíveis."
 
-    texto = f"Olá {nome_cliente}, {texto_ia}"
+    saudacoes = [
+        f"Oi {nome_cliente}, tudo certo?",
+        f"{nome_cliente}, beleza? 😊",
+        f"E aí {nome_cliente}, como posso ajudar?",
+        f"Fala {nome_cliente}! Bora remarcar?",
+    ]
+    intro = random.choice(saudacoes)
+
+    texto = f"{intro}\n\n{texto_ia}"
 
     if not re.search(r"\d{2}/\d{2}|\d{2}:\d{2}", texto_ia):
         horarios_disponiveis = supabase.table("view_horas_disponiveis") \
@@ -125,7 +132,7 @@ def sms_reply():
 
         texto += "\n\nTemos alguns horários disponíveis:\n\n"
         texto += "\n".join(sugestoes)
-        texto += "\n\nDeseja escolher um desses ou prefere outro dia/hora específico? 😊"
+        texto += "\n\nQuer escolher um desses ou prefere outro dia/hora? 😊"
 
     mensagem_final = texto.replace("\n", " • ").strip()[:800]
     print("📦 MENSAGEM ENVIADA AO TWILIO:", mensagem_final, flush=True)
