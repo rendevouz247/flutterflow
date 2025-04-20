@@ -92,7 +92,11 @@ def sms_reply():
             print("⚠️ Erro ao processar nova data/hora:", e, file=sys.stderr, flush=True)
 
     try:
-        system_prompt = "Você é um assistente virtual simpático e natural. Fale sempre em português informal. Seja direto, sem repetir coisas óbvias."
+        system_prompt = (
+            "Você é um assistente virtual que responde de forma natural e direta, sem enrolação. "
+            "Use linguagem casual e amigável, como se fosse uma pessoa real conversando por WhatsApp. "
+            "Evite perguntas repetidas e mensagens longas. Responda como um atendente experiente, gentil e objetivo."
+        )
         resposta = client.chat.completions.create(
             model="llama3-70b-8192",
             messages=[
@@ -102,19 +106,15 @@ def sms_reply():
         )
         texto_ia = resposta.choices[0].message.content.strip()
         print("🧠 IA RESPONDEU:", texto_ia, flush=True)
+
+        if len(texto_ia.split()) < 6 or ("?" in texto_ia and len(texto_ia) < 50):
+            texto_ia = "Claro! Aqui estão alguns horários que podemos te oferecer 👇"
+
     except Exception as e:
         print("❌ ERRO COM IA:", e, file=sys.stderr, flush=True)
         texto_ia = "Claro! Me diz melhor o que você precisa e te mostro os horários disponíveis."
 
-    saudacoes = [
-        f"Oi {nome_cliente}, tudo certo?",
-        f"{nome_cliente}, beleza? 😊",
-        f"E aí {nome_cliente}, como posso ajudar?",
-        f"Fala {nome_cliente}! Bora remarcar?",
-    ]
-    intro = random.choice(saudacoes)
-
-    texto = f"{intro}\n\n{texto_ia}"
+    texto = f"{texto_ia}"
 
     if not re.search(r"\d{2}/\d{2}|\d{2}:\d{2}", texto_ia):
         horarios_disponiveis = supabase.table("view_horas_disponiveis") \
@@ -130,7 +130,7 @@ def sms_reply():
             horas = item["horas_disponiveis"].get("disponiveis", [])[:3]
             sugestoes.append(f"{data_label}: {', '.join(horas)}")
 
-        texto += "\n\nTemos alguns horários disponíveis:\n\n"
+        texto += "\n\nAqui estão alguns horários disponíveis:\n\n"
         texto += "\n".join(sugestoes)
         texto += "\n\nQuer escolher um desses ou prefere outro dia/hora? 😊"
 
