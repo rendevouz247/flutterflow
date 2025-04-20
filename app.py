@@ -5,6 +5,7 @@ from twilio.rest import Client as TwilioClient
 from openai import OpenAI
 from datetime import datetime, timedelta, date
 import os
+import sys
 
 app = Flask(__name__)
 
@@ -60,7 +61,7 @@ def sms_reply():
                 texto_ia = resposta.choices[0].message.content.strip()
                 print("🧠 IA RESPONDEU:", texto_ia)
             except Exception as e:
-                print("❌ ERRO COM IA:", e)
+                print("❌ ERRO COM IA:", e, file=sys.stderr, flush=True)
                 texto_ia = "Desculpe, tivemos um problema ao buscar os horários."
 
             horarios_disponiveis = supabase.table("view_horas_disponiveis") \
