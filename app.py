@@ -61,7 +61,7 @@ def sms_reply():
             texto_ia = resposta.choices[0].message.content.strip()
 
             # Sugerir horários disponíveis automaticamente
-            horarios_disponiveis = supabase.table("view_horas_diponiveis") \
+            horarios_disponiveis = supabase.table("view_horas_disponiveis") \
                 .select("date, horas_disponiveis") \
                 .eq("company_id", company_id) \
                 .order("date") \
