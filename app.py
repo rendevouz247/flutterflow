@@ -49,26 +49,12 @@ def sms_reply():
     nome_atendente = agendamento.get("nome_atendente", "atendente")
 
     if msg_body.lower() == "yes":
-        nova_data = agendamento.get("nova_data_confirmacao")
-        if nova_data:
-            data, hora = nova_data.split(" ")
-            supabase.table("agendamentos").update({
-                "status": "Confirmado",
-                "date": data,
-                "horas": hora,
-                "nova_data_confirmacao": None
-            }).eq("cod_id", cod_id).execute()
-            resp.message(f"✅ Agendamento confirmado para {data} às {hora} com {nome_atendente}. Até lá!")
-        else:
-            supabase.table("agendamentos").update({"status": "Confirmado"}).eq("cod_id", cod_id).execute()
-            resp.message(f"Perfeito, {nome_cliente}! Consulta confirmada com {nome_atendente}. Até lá! 🩺")
+        supabase.table("agendamentos").update({"status": "Confirmado"}).eq("cod_id", cod_id).execute()
+        resp.message(f"Perfeito, {nome_cliente}! Consulta confirmada com {nome_atendente}. Até lá! 🩺")
         return Response(str(resp), content_type="text/xml; charset=utf-8")
 
     if msg_body.lower() == "no":
-        supabase.table("agendamentos").update({
-            "status": "Cancelado",
-            "nova_data_confirmacao": None
-        }).eq("cod_id", cod_id).execute()
+        supabase.table("agendamentos").update({"status": "Cancelado"}).eq("cod_id", cod_id).execute()
         resp.message("Consulta cancelada. Obrigado por avisar!")
         return Response(str(resp), content_type="text/xml; charset=utf-8")
 
@@ -89,27 +75,29 @@ def sms_reply():
 
             for linha in horarios.data:
                 if hora_bruta in linha["horas_disponiveis"].get("disponiveis", []):
-                    horario_str = f"{data_formatada.isoformat()} {hora_bruta}"
                     supabase.table("agendamentos").update({
-                        "nova_data_confirmacao": horario_str
+                        "status": "Confirmado",
+                        "date": data_formatada.isoformat(),
+                        "horas": hora_bruta
                     }).eq("cod_id", cod_id).execute()
-                    msg = f"Posso agendar então para o dia {data_formatada.strftime('%d/%m/%Y')} às {hora_bruta[:5]} com {nome_atendente}? Responda YES para confirmar."
-                    resp.message(msg)
+
+                    resp.message(f"Tudo certo! Sua nova consulta será dia {data_formatada.strftime('%d/%m')} às {hora_bruta[:5]} com {nome_atendente}. ✅")
                     return Response(str(resp), content_type="text/xml; charset=utf-8")
 
-            resp.message("Este horário não está disponível. Deseja que eu sugira outros?")
+            resp.message("Esse horário não está mais disponível. Quer que eu sugira outros?")
             return Response(str(resp), content_type="text/xml; charset=utf-8")
         except Exception as e:
             print("⚠️ Erro ao processar nova data/hora:", e, file=sys.stderr, flush=True)
 
     try:
         system_prompt = (
-            "Você é uma assistente virtual especializada em agendamentos."
-            " Sua função é ser simpática, direta e clara, ajudando o cliente a confirmar ou remarcar uma consulta."
-            " Responda com empatia e de forma natural, como uma pessoa conversando por WhatsApp."
+            "Você é uma assistente virtual simpática e eficiente, responsável por confirmar ou remarcar agendamentos via WhatsApp.\n"
+            "Sempre responda de forma natural, clara e amigável.\n"
+            "O cliente pode perguntar por horários ou querer remarcar.\n"
+            "Nunca repita a mesma pergunta. Seja direto, objetivo e gentil.\n"
         )
         resposta = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="gemma-7b-it",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": msg_body}
@@ -119,7 +107,7 @@ def sms_reply():
         print("🧠 IA RESPONDEU:", texto_ia, flush=True)
     except Exception as e:
         print("❌ ERRO COM IA:", e, file=sys.stderr, flush=True)
-        texto_ia = "Oi! Tudo bem? Aqui estão os horários disponíveis para você."
+        texto_ia = "Oi! Tudo bem? Aqui estão os horários disponíveis para você."  # fallback
 
     horarios_disponiveis = supabase.table("view_horas_disponiveis") \
         .select("date, horas_disponiveis") \
@@ -147,3 +135,4 @@ def sms_reply():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
