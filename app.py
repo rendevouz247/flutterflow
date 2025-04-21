@@ -49,12 +49,24 @@ def sms_reply():
     nome_atendente = agendamento.get("nome_atendente", "atendente")
 
     if msg_body.lower() == "yes":
+        nova_data = agendamento.get("nova_data_confirmacao")
+        if nova_data:
+            nova_data = datetime.fromisoformat(nova_data)
+            supabase.table("agendamentos").update({
+                "status": "Confirmado",
+                "date": nova_data.date().isoformat(),
+                "horas": nova_data.time().isoformat(timespec='seconds'),
+                "nova_data_confirmacao": None
+            }).eq("cod_id", cod_id).execute()
+            resp.message(f"Perfeito! Sua consulta foi remarcada para {nova_data.strftime('%d/%m')} às {nova_data.strftime('%H:%M')}. Até lá! 🩺")
+            return Response(str(resp), content_type="text/xml; charset=utf-8")
+
         supabase.table("agendamentos").update({"status": "Confirmado"}).eq("cod_id", cod_id).execute()
         resp.message(f"Perfeito, {nome_cliente}! Consulta confirmada com {nome_atendente}. Até lá! 🩺")
         return Response(str(resp), content_type="text/xml; charset=utf-8")
 
     if msg_body.lower() == "no":
-        supabase.table("agendamentos").update({"status": "Cancelado"}).eq("cod_id", cod_id).execute()
+        supabase.table("agendamentos").update({"status": "Cancelado", "nova_data_confirmacao": None}).eq("cod_id", cod_id).execute()
         resp.message("Consulta cancelada. Obrigado por avisar!")
         return Response(str(resp), content_type="text/xml; charset=utf-8")
 
@@ -75,13 +87,12 @@ def sms_reply():
 
             for linha in horarios.data:
                 if hora_bruta in linha["horas_disponiveis"].get("disponiveis", []):
+                    nova_data_hora = f"{data_formatada}T{hora_bruta}"
                     supabase.table("agendamentos").update({
-                        "status": "Confirmado",
-                        "date": data_formatada.isoformat(),
-                        "horas": hora_bruta
+                        "nova_data_confirmacao": nova_data_hora
                     }).eq("cod_id", cod_id).execute()
 
-                    resp.message(f"Horário alterado com sucesso para {data_formatada.strftime('%d/%m')} às {hora_bruta[:5]} com {nome_atendente}. ✅")
+                    resp.message(f"Posso agendar então para o dia {data_formatada.strftime('%d/%m')} às {hora_bruta[:5]}? Responda com YES para confirmar ou NO para cancelar.")
                     return Response(str(resp), content_type="text/xml; charset=utf-8")
 
             resp.message("Este horário não está mais disponível. Deseja que eu sugira outros?")
