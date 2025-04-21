@@ -1,17 +1,11 @@
 from flask import Flask, request, Response
-from twilio.twiml.messaging_response import MessagingResponse
 from supabase import create_client, Client as SupabaseClient
 from twilio.rest import Client as TwilioClient
-from openai import OpenAI
-from datetime import datetime, timedelta
-import os
-import sys
-import re
-from deep_translator import GoogleTranslator
+from datetime import datetime
+from groq import Groq
+import os, json, re
 
-app = Flask(__name__)
-
-# Configs
+# CONFIG
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 TWILIO_SID = os.getenv("TWILIO_SID")
@@ -21,141 +15,94 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 supabase: SupabaseClient = create_client(SUPABASE_URL, SUPABASE_KEY)
 twilio_client = TwilioClient(TWILIO_SID, TWILIO_AUTH)
-client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+groq_client = Groq(api_key=GROQ_API_KEY)
+
+app = Flask(__name__)
 
 @app.route("/sms", methods=["POST"])
 def sms_reply():
     msg_body = request.form.get("Body", "").strip()
     from_number = request.form.get("From")
-    resp = MessagingResponse()
     agora = datetime.utcnow()
 
-    result = supabase.table("agendamentos") \
+    agendamento = supabase.table("agendamentos") \
         .select("*") \
         .eq("user_phone", from_number) \
-        .order("created_at", desc=True) \
+        .eq("status", "Agendado") \
+        .order("date", desc=True) \
         .limit(1) \
         .execute()
 
-    if not result.data:
-        resp.message("Numéro introuvable dans notre système. Veuillez contacter le support.")
-        return Response(str(resp), content_type="text/xml; charset=utf-8")
+    if not agendamento.data:
+        return Response("<Response><Message>Aucun rendez-vous trouvé pour ce numéro.</Message></Response>", content_type="text/xml; charset=utf-8")
 
-    agendamento = result.data[0]
-    cod_id = agendamento["cod_id"]
-    status = agendamento["status"]
-    company_id = agendamento["company_id"]
-    nome_cliente = agendamento.get("nome_cliente") or "Client"
-    nome_atendente = agendamento.get("nome_atendente") or "un assistant"
-    empresa = agendamento.get("company_name") or "notre clinique"
-    data_consulta = datetime.strptime(agendamento["date"], "%Y-%m-%d").strftime("%d/%m/%Y")
-    hora_consulta = agendamento["horas"][:5]
+    dados = agendamento.data[0]
+    nome = dados.get("name_user") or "Client"
+    company_id = dados.get("company_id")
+    company_name = dados.get("company_name") or "notre clinique"
+    atendente = dados.get("nome_atendente") or "notre spécialiste"
+    cod_id = dados.get("cod_id")
+    telefone = dados.get("user_phone")
+    data_original = dados.get("date")
+    hora_original = dados.get("horas")[:5]
 
-    if msg_body.lower() in ["y", "yes", "oui"]:
-        if agendamento.get("nova_data_confirmacao"):
-            nova_data = agendamento["nova_data_confirmacao"]
-            data, hora = nova_data.split(" ")
-            supabase.table("agendamentos").update({
-                "date": data,
-                "horas": hora,
-                "status": "Confirmado",
-                "nova_data_confirmacao": None
-            }).eq("cod_id", cod_id).execute()
-            resp.message(f"Parfait {nome_cliente}! Votre rendez-vous a été reprogrammé pour le {datetime.strptime(data, '%Y-%m-%d').strftime('%d/%m')} à {hora[:5]}. ✅")
-            return Response(str(resp), content_type="text/xml; charset=utf-8")
-        else:
-            supabase.table("agendamentos").update({"status": "Confirmado"}).eq("cod_id", cod_id).execute()
-            resp.message(f"Parfait {nome_cliente}, votre rendez-vous avec {nome_atendente} est confirmé pour le {data_consulta} à {hora_consulta}. ✅")
-            return Response(str(resp), content_type="text/xml; charset=utf-8")
+    print(f"📩 Message de {from_number}: {msg_body}")
 
-    if msg_body.lower() in ["n", "no", "non"]:
-        supabase.table("agendamentos").update({"status": "Cancelado"}).eq("cod_id", cod_id).execute()
-        resp.message(f"Votre rendez-vous du {data_consulta} à {hora_consulta} a été annulé. Merci!")
-        return Response(str(resp), content_type="text/xml; charset=utf-8")
+    if msg_body.lower() == "y":
+        supabase.table("agendamentos").update({"status": "Confirmado"}).eq("cod_id", cod_id).execute()
+        return Response(f"<Response><Message>Merci {nome}! Votre rendez-vous est confirmé pour le {data_original} à {hora_original}.</Message></Response>", content_type="text/xml; charset=utf-8")
 
-    if msg_body.lower() in ["r", "remarquer", "remarcar"]:
-        mensagem = (
-            f"Bonjour {nome_cliente}, je suis Luna, l'assistante de {empresa}.\n"
-            f"Vous souhaitez une nouvelle date en particulier ou voulez-vous que je vous propose quelques créneaux disponibles ?"
+    if msg_body.lower() == "n":
+        supabase.table("agendamentos").update({"status": "Annulé"}).eq("cod_id", cod_id).execute()
+        return Response(f"<Response><Message>D'accord {nome}, votre rendez-vous du {data_original} à {hora_original} a été annulé.</Message></Response>", content_type="text/xml; charset=utf-8")
+
+    if msg_body.lower() == "r":
+        prompt = (
+            f"Tu es Luna, une assistante virtuelle de la clinique {company_name}. "
+            f"Un client nommé {nome} souhaite reprogrammer son rendez-vous prévu le {data_original} à {hora_original}. "
+            f"Propose-lui 3 dates avec horaires disponibles à partir d'aujourd'hui en te basant sur les disponibilités de la vue 'view_horas_disponiveis' pour la company_id {company_id}. "
+            f"Sois claire et directe, pose une seule question à la fin : "
+            f"'Souhaitez-vous que je programme le {data_original} à {hora_original} ?'"
         )
-        resp.message(mensagem)
-        return Response(str(resp), content_type="text/xml; charset=utf-8")
 
-    padrao_data = re.search(r"(\d{2}/\d{2})", msg_body)
-    padrao_hora = re.search(r"(\d{1,2}[:h]\d{2})", msg_body)
-
-    if padrao_data and padrao_hora:
         try:
-            data_str = padrao_data.group(1) + f"/{datetime.now().year}"
-            data_formatada = datetime.strptime(data_str, "%d/%m/%Y").date()
-            hora_bruta = padrao_hora.group(1).replace("h", ":") + ":01"
+            chat = groq_client.chat.completions.create(
+                model="mixtral-8x7b-32768",
+                messages=[
+                    {"role": "system", "content": "Tu es une assistante virtuelle efficace pour la prise de rendez-vous médicaux."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
 
-            horarios = supabase.table("view_horas_disponiveis") \
-                .select("*") \
-                .eq("company_id", company_id) \
-                .eq("date", data_formatada.isoformat()) \
-                .execute()
+            reponse = chat.choices[0].message.content.strip()
+            print("🧠 IA LUNA:", reponse)
 
-            for linha in horarios.data:
-                if hora_bruta in linha["horas_disponiveis"].get("disponiveis", []):
-                    supabase.table("agendamentos").update({
-                        "nova_data_confirmacao": f"{data_formatada} {hora_bruta}"
-                    }).eq("cod_id", cod_id).execute()
+            # Verifica se há confirmação implícita para agendamento direto
+            match = re.search(r"(\d{2}/\d{2}/\d{4}).*?(\d{2}:\d{2})", msg_body)
+            if match:
+                nova_data = match.group(1).replace("/", "-")
+                nova_hora = match.group(2) + ":00"
+                print("🕓 Tentando reservar:", nova_data, "às", nova_hora)
 
-                    resp.message(
-                        f"Je peux reprogrammer pour le {data_formatada.strftime('%d/%m')} à {hora_bruta[:5]}. C’est bon pour vous? Répondez avec Y pour confirmer."
-                    )
-                    return Response(str(resp), content_type="text/xml; charset=utf-8")
+                # Atualiza agendamento
+                supabase.table("agendamentos").update({
+                    "date": nova_data,
+                    "horas": nova_hora,
+                    "status": "Confirmado"
+                }).eq("cod_id", cod_id).execute()
 
-            resp.message("Désolé, cet horaire n’est plus disponible. Souhaitez-vous que je vous propose d’autres options ?")
-            return Response(str(resp), content_type="text/xml; charset=utf-8")
+                confirmacao = f"Parfait {nome}! Votre rendez-vous a été reprogrammé pour le {nova_data} à {nova_hora[:5]}."
+                return Response(f"<Response><Message>{confirmacao}</Message></Response>", content_type="text/xml; charset=utf-8")
+
+            reponse = reponse.replace("\n", " ")[:800]
+            return Response(f"<Response><Message>{reponse}</Message></Response>", content_type="text/xml; charset=utf-8")
 
         except Exception as e:
-            print("⚠️ Erreur lors du traitement de la date/heure :", e, file=sys.stderr, flush=True)
+            print("❌ ERREUR GROQ:", e)
+            return Response("<Response><Message>Désolé, une erreur est survenue avec Luna.</Message></Response>", content_type="text/xml; charset=utf-8")
 
-    try:
-        system_prompt = (
-            "Você é Luna, a assistente virtual de agendamentos simpática, eficiente e objetiva.\n"
-            "Ajude o cliente a confirmar ou remarcar sua consulta com clareza e naturalidade.\n"
-            "Não invente datas. Se o cliente quiser sugestões, liste as próximas datas disponíveis.\n"
-            "Se ele sugerir uma data, verifique se há horários disponíveis e ofereça uma confirmação."
-        )
-        resposta = client.chat.completions.create(
-            model="gemma-7b-it",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": msg_body}
-            ]
-        )
-        texto_ia = resposta.choices[0].message.content.strip()
-        print("🧠 IA RESPONDEU:", texto_ia, flush=True)
-    except Exception as e:
-        print("❌ ERRO COM IA:", e, file=sys.stderr, flush=True)
-        texto_ia = "Je suis Luna, votre assistante virtuelle. Voici les horaires disponibles :"
-
-    horarios_disponiveis = supabase.table("view_horas_disponiveis") \
-        .select("date, horas_disponiveis") \
-        .eq("company_id", company_id) \
-        .order("date") \
-        .limit(3) \
-        .execute()
-
-    sugestoes = []
-    for item in horarios_disponiveis.data:
-        data_formatada = datetime.strptime(item["date"], "%Y-%m-%d").strftime("%d/%m")
-        horas = item["horas_disponiveis"].get("disponiveis", [])[:3]
-        sugestoes.append(f"📅 {data_formatada}: {', '.join(horas)}")
-
-    texto = f"{texto_ia}\n\nVoici quelques horaires disponibles pour vous :\n\n"
-    texto += "\n".join(sugestoes)
-    texto += "\n\nSouhaitez-vous que je réserve l’un de ces horaires ? 😊"
-
-    mensagem_final = texto.replace("\n", " • ").strip()[:800]
-    print("📦 MENSAGEM ENVIADA AO TWILIO:", mensagem_final, flush=True)
-
-    resp.message(mensagem_final)
-    return Response(str(resp), content_type="text/xml; charset=utf-8")
+    return Response("<Response><Message>Merci! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.</Message></Response>", content_type="text/xml; charset=utf-8")
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
