@@ -59,19 +59,13 @@ def sms_reply():
         return Response(str(resp), content_type="text/xml; charset=utf-8")
 
     padrao_data = re.search(r"(\d{2}/\d{2})", msg_body)
-    padrao_hora = re.search(r"(\d{1,2})(?:[:h](\d{2}))?", msg_body)
+    padrao_hora = re.search(r"(\d{1,2}[:h]\d{2})", msg_body)
 
     if padrao_data and padrao_hora:
         try:
-            dia_mes = padrao_data.group(1)
-            hora_num = padrao_hora.group(1)
-            minuto_num = padrao_hora.group(2) or "00"
-
-            data_str = f"{dia_mes}/{datetime.now().year}"
+            data_str = padrao_data.group(1) + f"/{datetime.now().year}"
             data_formatada = datetime.strptime(data_str, "%d/%m/%Y").date()
-            hora_bruta = f"{hora_num.zfill(2)}:{minuto_num.zfill(2)}:01"
-
-            print(f"🕓 Tentando reservar: {data_formatada} às {hora_bruta}")
+            hora_bruta = padrao_hora.group(1).replace("h", ":") + ":01"
 
             horarios = supabase.table("view_horas_disponiveis") \
                 .select("*") \
@@ -87,13 +81,13 @@ def sms_reply():
                         "horas": hora_bruta
                     }).eq("cod_id", cod_id).execute()
 
-                    resp.message(f"✅ Agendado para {data_formatada.strftime('%d/%m')} às {hora_bruta[:5]} com {nome_atendente}. Te esperamos lá!")
+                    resp.message(f"Horário alterado com sucesso para {data_formatada.strftime('%d/%m')} às {hora_bruta[:5]} com {nome_atendente}. ✅")
                     return Response(str(resp), content_type="text/xml; charset=utf-8")
 
-            resp.message("❌ Esse horário não está mais disponível. Deseja que eu sugira outros?")
+            resp.message("Este horário não está mais disponível. Deseja que eu sugira outros?")
             return Response(str(resp), content_type="text/xml; charset=utf-8")
         except Exception as e:
-            print("⚠️ ERRO ao processar nova data/hora:", e, file=sys.stderr, flush=True)
+            print("⚠️ Erro ao processar nova data/hora:", e, file=sys.stderr, flush=True)
 
     try:
         system_prompt = (
@@ -102,7 +96,7 @@ def sms_reply():
             " Responda com empatia e de forma natural, como uma pessoa conversando por WhatsApp."
         )
         resposta = client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama3-8b-8192",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": msg_body}
@@ -112,7 +106,7 @@ def sms_reply():
         print("🧠 IA RESPONDEU:", texto_ia, flush=True)
     except Exception as e:
         print("❌ ERRO COM IA:", e, file=sys.stderr, flush=True)
-        texto_ia = "Oi! Tudo bem? Aqui estão os horários disponíveis para você."
+        texto_ia = "Oi! Tudo bem? Aqui estão os horários disponíveis para você."  # fallback
 
     horarios_disponiveis = supabase.table("view_horas_disponiveis") \
         .select("date, horas_disponiveis") \
