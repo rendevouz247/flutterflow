@@ -64,12 +64,12 @@ def sms_reply():
         return Response(f"<Response><Message>D'accord {nome}, votre rendez-vous du {data_original} à {hora_original} a été annulé.</Message></Response>", content_type="text/xml; charset=utf-8")
 
     if msg_body.lower() == "r":
-        prompt = (
-            f"Tu es Luna, une assistante virtuelle de la clinique {company_name}.
-            Un client nommé {nome} souhaite reprogrammer son rendez-vous prévu le {data_original} à {hora_original}.
-            Voici les 3 prochaines dates disponibles à partir de demain dans la vue 'view_horas_disponiveis' pour company_id {company_id}.
-            Demande-lui clairement s'il souhaite reprogrammer. Ne propose pas des horaires passés."
-        )
+        
+        prompt = f"""Tu es Luna, une assistante virtuelle de la clinique {company_name}.
+        Un client nommé {nome} souhaite reprogrammer son rendez-vous prévu le {data_original} à {hora_original}.
+        Voici les 3 prochaines dates disponibles à partir de demain dans la vue 'view_horas_disponiveis' pour company_id {company_id}.
+        Demande-lui clairement s'il souhaite reprogrammer. Ne propose pas des horaires passés."""
+
 
         try:
             chat = groq_client.chat.completions.create(
