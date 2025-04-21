@@ -1,8 +1,9 @@
 from flask import Flask, request, Response
 from supabase import create_client, Client as SupabaseClient
 from twilio.rest import Client as TwilioClient
-from datetime import datetime
+from datetime import datetime, timedelta
 from groq import Groq
+from deep_translator import GoogleTranslator
 import os, json, re
 
 # CONFIG
@@ -24,6 +25,12 @@ def sms_reply():
     msg_body = request.form.get("Body", "").strip()
     from_number = request.form.get("From")
     agora = datetime.utcnow()
+
+    # Detecta idioma da mensagem recebida
+    try:
+        idioma = GoogleTranslator(source='auto', target='en').detect(msg_body)
+    except:
+        idioma = 'fr'
 
     agendamento = supabase.table("agendamentos") \
         .select("*") \
@@ -58,19 +65,17 @@ def sms_reply():
 
     if msg_body.lower() == "r":
         prompt = (
-            f"Tu es Luna, une assistante virtuelle de la clinique {company_name}. "
-            f"Un client nommé {nome} souhaite reprogrammer son rendez-vous prévu le {data_original} à {hora_original}. "
-            f"Propose-lui 3 dates avec horaires disponibles à partir d'aujourd'hui en te basant sur les disponibilités de la vue 'view_horas_disponiveis' pour la company_id {company_id}. "
-            f"Sois claire et directe, pose une seule question à la fin : "
-            f"'Souhaitez-vous que je programme le {data_original} à {hora_original} ?'"
+            f"Tu es Luna, une assistante virtuelle de la clinique {company_name}.
+            Un client nommé {nome} souhaite reprogrammer son rendez-vous prévu le {data_original} à {hora_original}.
+            Voici les 3 prochaines dates disponibles à partir de demain dans la vue 'view_horas_disponiveis' pour company_id {company_id}.
+            Demande-lui clairement s'il souhaite reprogrammer. Ne propose pas des horaires passés."
         )
 
         try:
-            
             chat = groq_client.chat.completions.create(
-                model="llama3-70b-8192",
+                model="llama3-8b-8192",
                 messages=[
-                    {"role": "system", "content": "Tu es une assistante virtuelle efficace pour la prise de rendez-vous médicaux."},
+                    {"role": "system", "content": "Tu es Luna, une assistante virtuelle humaine, directe, naturelle et précise. Tu aides les clients à choisir une nouvelle date de rendez-vous médicale."},
                     {"role": "user", "content": prompt}
                 ]
             )
@@ -78,14 +83,12 @@ def sms_reply():
             reponse = chat.choices[0].message.content.strip()
             print("🧠 IA LUNA:", reponse)
 
-            # Verifica se há confirmação implícita para agendamento direto
             match = re.search(r"(\d{2}/\d{2}/\d{4}).*?(\d{2}:\d{2})", msg_body)
             if match:
                 nova_data = match.group(1).replace("/", "-")
                 nova_hora = match.group(2) + ":00"
                 print("🕓 Tentando reservar:", nova_data, "às", nova_hora)
 
-                # Atualiza agendamento
                 supabase.table("agendamentos").update({
                     "date": nova_data,
                     "horas": nova_hora,
