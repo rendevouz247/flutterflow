@@ -20,7 +20,6 @@ twilio_client= TwilioClient(TWILIO_SID, TWILIO_AUTH)
 groq_client  = Groq(api_key=GROQ_API_KEY)
 
 app = Flask(__name__)
-
 app.logger.setLevel(logging.INFO)
 
 TRUNCATE_LIMIT = 500
@@ -41,6 +40,7 @@ def parse_date_from_text(text):
             messages=[
                 {"role": "system", "content": (
                     "Tu es un assistant JSON. Ta tâche est d'extraire une date future à partir d'une phrase en français (ex: 'le 19 mai', 'demain', 'lundi prochain'). "
+                    "Si l'année n'est pas mentionnée, utilise l'année actuelle. Si la date est passée, utilise l'année suivante. "
                     "Réponds uniquement en JSON avec ce format exact: { \"date\": \"YYYY-MM-DD\" }. "
                     "Si tu ne trouves aucune date, réponds: { \"date\": null }. "
                     "Ne parle pas, ne fais aucun commentaire, ne formate pas le JSON, retourne une ligne unique."
@@ -49,7 +49,7 @@ def parse_date_from_text(text):
             ]
         )
         raw = nlu.choices[0].message.content.strip()
-        print("🧠 Resposta IA bruta:", raw)
+        app.logger.info(f"🧠 Resposta IA bruta: {raw}")
         result = json.loads(raw)
         return result.get("date")
     except Exception as e:
@@ -102,9 +102,6 @@ def sms_reply():
         send_message(resp, "Avez-vous un jour de préférence pour reprogrammer ? Vous pouvez répondre par 'demain', 'lundi', 'le 3 mai', etc.")
         return str(resp), 200, {"Content-Type": "text/xml"}
 
-    # DEBUG FORÇANDO IA TEMPORARIAMENTE:
-    # reagendando = True
-
     if reagendando:
         preferred_date = parse_date_from_text(msg)
         app.logger.info(f"📅 Data extraída: {preferred_date}")
@@ -116,44 +113,39 @@ def sms_reply():
                 send_message(resp, "Désolé, je n'ai pas compris la date. Essayez à nouveau en indiquant un jour précis (ex: 'demain', 'lundi', 'le 3 mai').")
                 return str(resp), 200, {"Content-Type": "text/xml"}
 
-            def get_available_times(date):
-                rows = (
-                    supabase
-                    .from_("view_horas_disponiveis")
-                    .select("horas_disponiveis")
-                    .eq("company_id", comp)
-                    .eq("date", date)
-                    .execute()
-                    .data
-                )
-                times = []
-                for r in rows:
-                    j = r.get("horas_disponiveis") or {}
-                    times += j.get("disponiveis", [])
-                return sorted(set(times))
-
-            current = preferred_date
-            options = get_available_times(current)
-
-            if options:
-                supabase.table("agendamentos").update({"date": preferred_date, "status": "Confirmado", "reagendando": False}).eq("cod_id", cod_id).execute()
-                send_message(resp, f"Voici les horaires disponibles pour le {format_date(current)}:\n" + ", ".join(options))
-            else:
-                prev_day = (datetime.fromisoformat(current) - timedelta(days=1)).strftime("%Y-%m-%d")
-                next_day = (datetime.fromisoformat(current) + timedelta(days=1)).strftime("%Y-%m-%d")
-                prev_options = get_available_times(prev_day)
-                next_options = get_available_times(next_day)
-
-                reply = f"Désolé, aucun horaire disponible le {format_date(current)}"
-                if prev_options:
-                    reply += f". Mais il y en a le {format_date(prev_day)}: {', '.join(prev_options)}"
-                if next_options:
-                    reply += f". Et aussi le {format_date(next_day)}: {', '.join(next_options)}"
-                send_message(resp, reply)
-
+            # Salva a data no Supabase em campo temporário para confirmar depois
+            supabase.table("agendamentos").update({"nova_data": preferred_date}).eq("cod_id", cod_id).execute()
+            send_message(resp, f"Souhaitez-vous reprogrammer pour le {format_date(preferred_date)} ? Répondez OUI pour confirmer ou NON pour choisir une autre date.")
             return str(resp), 200, {"Content-Type": "text/xml"}
 
-    app.logger.info("⚠️ Caiu na mensagem padrão final")
+    if msg == "oui":
+        ag = (
+            supabase
+            .table("agendamentos")
+            .select("nova_data")
+            .eq("user_phone", frm)
+            .eq("cod_id", cod_id)
+            .limit(1)
+            .execute()
+            .data
+        )
+        if ag and ag[0].get("nova_data"):
+            nova_data = ag[0]["nova_data"]
+            supabase.table("agendamentos").update({
+                "date": nova_data,
+                "status": "Confirmado",
+                "reagendando": False,
+                "nova_data": None
+            }).eq("cod_id", cod_id).execute()
+            send_message(resp, f"Parfait {nome}! Votre rendez-vous a été reprogrammé pour le {format_date(nova_data)}.")
+            return str(resp), 200, {"Content-Type": "text/xml"}
+
+    if msg == "non":
+        supabase.table("agendamentos").update({"nova_data": None}).eq("cod_id", cod_id).execute()
+        send_message(resp, "D'accord, dites-moi une nouvelle date pour reprogrammer.")
+        return str(resp), 200, {"Content-Type": "text/xml"}
+
+    app.logger.info("⚠️ Caiu na message padrão final")
     send_message(resp, "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.")
     return str(resp), 200, {"Content-Type": "text/xml"}
 
