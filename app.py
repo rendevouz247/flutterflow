@@ -193,7 +193,19 @@ def sms_reply():
         if horaires:
             texto = f"Voici les horaires disponibles pour le {format_date(preferred_date_raw)}:\n" + ", ".join(horaires)
         else:
-            texto = f"Aucun horaire disponible pour le {format_date(preferred_date_raw)}. Souhaitez-vous choisir un autre jour?"
+            # procura próximos 3 dias com disponibilidade
+            for i in range(1, 4):
+                proxima_data = (datetime.fromisoformat(preferred_date_raw) + timedelta(days=i)).date().isoformat()
+                prox_horarios = get_available_times(proxima_data, company_id=comp)
+                if prox_horarios:
+                    texto = (
+                        f"Aucun horaire disponible pour le {format_date(preferred_date_raw)}. "
+                        f"Mais voici les horaires pour le {format_date(proxima_data)}:\n" + ", ".join(prox_horarios)
+                    )
+                    break
+            else:
+                texto = f"Aucun horaire disponible pour le {format_date(preferred_date_raw)} ni les jours suivants."
+
 
         supabase.table("agendamentos").update({"nova_data": preferred_date_raw, "nova_hora": None}).eq("cod_id", cod_id).execute()
         send_message(resp, texto + "\n\nRépondez avec l'heure souhaitée (ex: 09:00) ou un autre jour.")
