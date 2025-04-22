@@ -107,7 +107,7 @@ def sms_reply():
 
     if reagendando:
         preferred_date = parse_date_from_text(msg)
-        app.logger.info(f\"📅 Data extraída: {preferred_date}\")
+        app.logger.info(f"📅 Data extraída: {preferred_date}")
 
         if preferred_date:
             try:
