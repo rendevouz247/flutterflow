@@ -102,38 +102,6 @@ def sms_reply():
         send_message(resp, "Avez-vous un jour de préférence pour reprogrammer ? Vous pouvez répondre par 'demain', 'lundi', 'le 3 mai', etc.")
         return str(resp), 200, {"Content-Type": "text/xml"}
 
-    if reagendando:
-        preferred_date_raw = parse_date_from_text(msg)
-
-        # Corrige ano se necessário
-        if preferred_date_raw:
-            try:
-                dt = datetime.fromisoformat(preferred_date_raw)
-                now = datetime.now()
-                if dt.year < now.year:
-                    dt = dt.replace(year=now.year)
-                    if dt < now:
-                        dt = dt.replace(year=now.year + 1)
-                preferred_date = dt.date().isoformat()
-            except:
-                preferred_date = None
-        else:
-            preferred_date = None
-
-        app.logger.info(f"📅 Data extraída: {preferred_date}")
-
-        if preferred_date:
-            try:
-                current_fmt = datetime.fromisoformat(preferred_date).strftime('%d/%m/%Y')
-            except ValueError:
-                send_message(resp, "Désolé, je n'ai pas compris la date. Essayez à nouveau en indiquant un jour précis (ex: 'demain', 'lundi', 'le 3 mai').")
-                return str(resp), 200, {"Content-Type": "text/xml"}
-
-            # Salva a data no Supabase em campo temporário para confirmar depois
-            supabase.table("agendamentos").update({"nova_data": preferred_date}).eq("cod_id", cod_id).execute()
-            send_message(resp, f"Souhaitez-vous reprogrammer pour le {format_date(preferred_date)} ? Répondez OUI pour confirmer ou NON pour choisir une autre date.")
-            return str(resp), 200, {"Content-Type": "text/xml"}
-
     if msg == "oui":
         ag = (
             supabase
@@ -160,6 +128,37 @@ def sms_reply():
         supabase.table("agendamentos").update({"nova_data": None}).eq("cod_id", cod_id).execute()
         send_message(resp, "D'accord, dites-moi une nouvelle date pour reprogrammer.")
         return str(resp), 200, {"Content-Type": "text/xml"}
+
+    # AQUI sim roda IA, se ainda está em modo de reagendamento e msg for nova data
+    if reagendando:
+        preferred_date_raw = parse_date_from_text(msg)
+        app.logger.info(f"📅 Data extraída: {preferred_date_raw}")
+
+        # Corrige ano se IA retornou passado
+        if preferred_date_raw:
+            try:
+                dt = datetime.fromisoformat(preferred_date_raw)
+                now = datetime.now()
+                if dt.year < now.year:
+                    dt = dt.replace(year=now.year)
+                    if dt < now:
+                        dt = dt.replace(year=now.year + 1)
+                preferred_date = dt.date().isoformat()
+            except:
+                preferred_date = None
+        else:
+            preferred_date = None
+
+        if preferred_date:
+            try:
+                datetime.fromisoformat(preferred_date)
+            except ValueError:
+                send_message(resp, "Désolé, je n'ai pas compris la date. Essayez à nouveau en indiquant un jour précis (ex: 'demain', 'lundi', 'le 3 mai').")
+                return str(resp), 200, {"Content-Type": "text/xml"}
+
+            supabase.table("agendamentos").update({"nova_data": preferred_date}).eq("cod_id", cod_id).execute()
+            send_message(resp, f"Souhaitez-vous reprogrammer pour le {format_date(preferred_date)} ? Répondez OUI pour confirmer ou NON pour choisir une autre date.")
+            return str(resp), 200, {"Content-Type": "text/xml"}
 
     app.logger.info("⚠️ Caiu na message padrão final")
     send_message(resp, "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.")
