@@ -79,6 +79,9 @@ def sms_reply():
     nome = a.get("name_user", "Client")
     cod_id = a["cod_id"]
     comp = a["company_id"]
+    reagendando = a.get("reagendando", False)
+
+    print("🟡 Campo reagendando no Supabase:", reagendando)
 
     if msg == "y":
         supabase.table("agendamentos").update({"status": "Confirmado", "reagendando": False}).eq("cod_id", cod_id).execute()
@@ -94,14 +97,6 @@ def sms_reply():
         supabase.table("agendamentos").update({"reagendando": True}).eq("cod_id", cod_id).execute()
         send_message(resp, "Avez-vous un jour de préférence pour reprogrammer ? Vous pouvez répondre par 'demain', 'lundi', 'le 3 mai', etc.")
         return str(resp), 200, {"Content-Type": "text/xml"}
-
-    # Pega reagendando novamente após possível atualização
-
-    reagendando = a.get("reagendando", False)
-    print("🟡 Campo reagendando no Supabase:", reagendando)
-
-
-
 
     if reagendando:
         preferred_date = parse_date_from_text(msg)
