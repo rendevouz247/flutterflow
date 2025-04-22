@@ -31,23 +31,24 @@ def send_message(resp: MessagingResponse, text: str):
 def format_date(date_str: str) -> str:
     return datetime.fromisoformat(date_str).strftime("%d/%m/%Y")
 
-def parse_date_from_text(text: str):
-    """
-    Função simples para tentar encontrar uma data no texto usando expressões regulares
-    """
-    # Adicione expressões regulares que você quiser para suportar datas mais complexas
-    date_patterns = [
-        (r"(demain)", (datetime.now() + timedelta(days=1)).date()),
-        (r"(lundi)", (datetime.now() + timedelta(days=(7 - datetime.now().weekday()))).date()),
-        (r"(le (\d{1,2}) (\w+))", "Custom Regex (pode ser o dia do mês)")
-    ]
-   
-    for pattern, date in date_patterns:
-        match = re.search(pattern, text.lower())
-        if match:
-            return str(date)  # Aqui você pode melhorar para retornar uma data real
+def parse_date_from_text(text):
+    try:
+        nlu = groq_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": (
+                    "Tu es un assistant qui extrait une date future mentionnée dans un texte (ex: 'le 19 mai', 'demain', 'lundi prochain'). "
+                    "Retourne seulement en JSON comme ceci: { \"date\": \"YYYY-MM-DD\" } ou { \"date\": null } si aucune date n'est trouvée."
+                )},
+                {"role": "user", "content": text}
+            ]
+        )
+        result = json.loads(nlu.choices[0].message.content)
+        return result.get("date")
+    except Exception as e:
+        print("❌ Erro ao extrair data:", e)
+        return None
 
-    return None
 
 @app.route("/sms", methods=["POST"])
 def sms_reply():
@@ -94,6 +95,12 @@ def sms_reply():
     preferred_date = parse_date_from_text(msg)
 
     if preferred_date:
+            try:
+                current_fmt = datetime.fromisoformat(preferred_date).strftime('%d/%m/%Y')
+            except ValueError:
+                send_message(resp, "Désolé, je n'ai pas compris la date. Essayez à nouveau en indiquant un jour précis (ex: 'demain', 'lundi', 'le 3 mai').")
+                return str(resp), 200, {"Content-Type": "text/xml"}
+                
         def get_available_times(date):
             rows = (
                 supabase
