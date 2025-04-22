@@ -103,7 +103,23 @@ def sms_reply():
         return str(resp), 200, {"Content-Type": "text/xml"}
 
     if reagendando:
-        preferred_date = parse_date_from_text(msg)
+        preferred_date_raw = parse_date_from_text(msg)
+
+        # Corrige ano se necessário
+        if preferred_date_raw:
+            try:
+                dt = datetime.fromisoformat(preferred_date_raw)
+                now = datetime.now()
+                if dt.year < now.year:
+                    dt = dt.replace(year=now.year)
+                    if dt < now:
+                        dt = dt.replace(year=now.year + 1)
+                preferred_date = dt.date().isoformat()
+            except:
+                preferred_date = None
+        else:
+            preferred_date = None
+
         app.logger.info(f"📅 Data extraída: {preferred_date}")
 
         if preferred_date:
