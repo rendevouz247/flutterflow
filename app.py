@@ -6,9 +6,6 @@ from datetime import datetime, timedelta
 from groq import Groq
 import os, json, re
 import logging
-app.logger.setLevel(logging.INFO)
-
-
 
 # CONFIG
 SUPABASE_URL  = os.getenv("SUPABASE_URL")
@@ -23,6 +20,8 @@ twilio_client= TwilioClient(TWILIO_SID, TWILIO_AUTH)
 groq_client  = Groq(api_key=GROQ_API_KEY)
 
 app = Flask(__name__)
+
+app.logger.setLevel(logging.INFO)
 
 TRUNCATE_LIMIT = 500
 
