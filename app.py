@@ -25,7 +25,6 @@ app.logger.setLevel(logging.INFO)
 TRUNCATE_LIMIT = 500
 HORA_FLAG = "HORA_SELECIONADA"
 
-
 def truncate(text: str, limit: int = TRUNCATE_LIMIT) -> str:
     return text if len(text) <= limit else text[: limit - 3] + "..."
 
@@ -67,7 +66,7 @@ def traduzir(texto: str, destino: str) -> str:
 def parse_date_from_text(text):
     try:
         # Checa se é uma hora isolada antes de chamar IA
-        hora_match = re.search(r"(\d{1,2}[:h]\d{2})(:\d{2})?", text)
+        hora_match = re.search(r"\b(\d{1,2}[:h]\d{2})(:\d{2})?\b", text)
         if hora_match:
             return HORA_FLAG
 
@@ -105,7 +104,6 @@ def parse_date_from_text(text):
     except Exception as e:
         app.logger.info(f"❌ Erro ao extrair data: {e}")
         return None
-
 
 @app.route("/sms", methods=["POST"])
 def sms_reply():
