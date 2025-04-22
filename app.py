@@ -41,7 +41,7 @@ def parse_date_from_text(text):
                 {"role": "system", "content": (
                     "Tu es un assistant JSON. Ta tâche est d'extraire une date future à partir d'une phrase en français (ex: 'le 19 mai', 'demain', 'lundi prochain'). "
                     "Si l'année n'est pas mentionnée, utilise l'année actuelle. Si la date est passée, utilise l'année suivante. "
-                    "Réponds uniquement en JSON avec ce format exact: { \"date\": \"YYYY-MM-DD\" }. "
+                    "Réponds uniquement en JSON comme ceci: { \"date\": \"2025-05-03\" } avec une vraie date future. Jamais retourner \"YYYY-MM-DD\"."
                     "Si tu ne trouves aucune date, réponds: { \"date\": null }. "
                     "Ne parle pas, ne fais aucun commentaire, ne formate pas le JSON, retourne une ligne unique."
                 )},
@@ -51,7 +51,10 @@ def parse_date_from_text(text):
         raw = nlu.choices[0].message.content.strip()
         app.logger.info(f"🧠 Resposta IA bruta: {raw}")
         result = json.loads(raw)
-        return result.get("date")
+        value = result.get("date")
+        if value in [None, "YYYY-MM-DD"]:
+            return None
+        return value)
     except Exception as e:
         app.logger.info(f"❌ Erro ao extrair data: {e}")
         return None
