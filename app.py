@@ -52,7 +52,7 @@ def get_available_times(date: str, company_id: str) -> list:
 
 def parse_date_from_text(text):
     try:
-        if re.match(r"^\d{1,2}[:h]\d{2}$", text.strip()):
+        if re.match(r"^\d{1,2}[:h]\d{2}(:\d{2})?$", text.strip()):
             return HORA_FLAG
 
         nlu = groq_client.chat.completions.create(
