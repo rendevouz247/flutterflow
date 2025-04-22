@@ -60,11 +60,11 @@ def parse_date_from_text(text):
             model="llama3-8b-8192",
             messages=[
                 {"role": "system", "content": (
-                    "Tu es un assistant JSON. Ta tâche est d'extraire une date future à partir d'une phrase en français (ex: 'le 19 mai', 'demain', 'lundi prochain'). "
-                    "Si l'année n'est pas mentionnée, utilise l'année actuelle. Si la date est passée, utilise l'année suivante. "
-                    "Réponds uniquement en JSON comme ceci: { \"date\": \"2025-05-03\" } avec une vraie date future. Jamais retourner \"YYYY-MM-DD\". "
-                    "Si tu ne trouves aucune date, réponds: { \"date\": null }. "
-                    "Ne parle pas, ne fais aucun commentaire, ne formate pas le JSON, retourne une ligne unique."
+                    "Tu es un assistant JSON. Ta tâche est d'extraire une date FUTURE à partir d'une phrase en français (ex: 'le 19 mai', 'demain', 'lundi prochain'). "
+                    "Si l'année n'est pas précisée, utilise l'année en cours: 2025. Si la date est déjà passée, utilise la prochaine occurrence future. "
+                    "Retourne uniquement un JSON comme { \"date\": \"2025-05-03\" }. Si aucune date n'est trouvée, retourne { \"date\": null }. "
+                    "Ne réponds rien d'autre que ce JSON, pas de commentaires, pas de texte."
+
                 )},
                 {"role": "user", "content": text}
             ]
