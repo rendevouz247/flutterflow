@@ -72,10 +72,11 @@ def parse_date_from_text(text):
             return None
         value = value.split("T")[0] if "T" in value else value
 
-        # Corrige ano se IA retornou passado
         now = datetime.now()
         dt = datetime.fromisoformat(value)
-        if dt.year < now.year:
+
+        # Corrige o ano se a data estiver no passado
+        if dt < now:
             dt = dt.replace(year=now.year)
             if dt < now:
                 dt = dt.replace(year=now.year + 1)
@@ -91,7 +92,7 @@ def parse_date_from_text(text):
     except Exception as e:
         app.logger.info(f"❌ Erro ao extrair data: {e}")
         return None
-
+        
 @app.route("/sms", methods=["POST"])
 def sms_reply():
     msg = request.form.get("Body", "").strip().lower()
