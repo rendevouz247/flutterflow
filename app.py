@@ -81,8 +81,6 @@ def sms_reply():
     comp = a["company_id"]
     reagendando = a.get("reagendando", False)
 
-    print("🟡 Campo reagendando no Supabase:", reagendando)
-
     if msg == "y":
         supabase.table("agendamentos").update({"status": "Confirmado", "reagendando": False}).eq("cod_id", cod_id).execute()
         send_message(resp, f"Merci {nome}! Votre rendez-vous est confirmé.")
@@ -95,13 +93,9 @@ def sms_reply():
 
     if msg == "r":
         supabase.table("agendamentos").update({"reagendando": True}).eq("cod_id", cod_id).execute()
-    
-        # Atualiza os dados localmente também!
-        reagendando = True
-    
+        reagendando = True  # Atualiza também na memória local
         send_message(resp, "Avez-vous un jour de préférence pour reprogrammer ? Vous pouvez répondre par 'demain', 'lundi', 'le 3 mai', etc.")
         return str(resp), 200, {"Content-Type": "text/xml"}
-
 
     if reagendando:
         preferred_date = parse_date_from_text(msg)
