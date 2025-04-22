@@ -96,16 +96,12 @@ def sms_reply():
         return str(resp), 200, {"Content-Type": "text/xml"}
 
     # Pega reagendando novamente após possível atualização
-    ag = (
-        supabase
-        .table("agendamentos")
-        .select("reagendando")
-        .eq("cod_id", cod_id)
-        .limit(1)
-        .execute()
-        .data
-    )
-    reagendando = ag[0].get("reagendando") if ag else False
+
+    reagendando = a.get("reagendando", False)
+    print("🟡 Campo reagendando no Supabase:", reagendando)
+
+
+
 
     if reagendando:
         preferred_date = parse_date_from_text(msg)
