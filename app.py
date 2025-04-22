@@ -95,8 +95,13 @@ def sms_reply():
 
     if msg == "r":
         supabase.table("agendamentos").update({"reagendando": True}).eq("cod_id", cod_id).execute()
+    
+        # Atualiza os dados localmente também!
+        reagendando = True
+    
         send_message(resp, "Avez-vous un jour de préférence pour reprogrammer ? Vous pouvez répondre par 'demain', 'lundi', 'le 3 mai', etc.")
         return str(resp), 200, {"Content-Type": "text/xml"}
+
 
     if reagendando:
         preferred_date = parse_date_from_text(msg)
