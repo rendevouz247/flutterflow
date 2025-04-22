@@ -111,6 +111,11 @@ def parse_date_from_text(text):
 @app.route("/sms", methods=["POST"])
 def sms_reply():
     msg = request.form.get("Body", "").strip().lower()
+
+    confirmacoes = ["sim", "oui", "yes"]
+    negacoes = ["não", "non", "no"]
+    
+    
     frm = request.form.get("From")
     resp = MessagingResponse()
 
@@ -139,6 +144,29 @@ def sms_reply():
     reagendando = a.get("reagendando", False)
     nova_data = a.get("nova_data")
 
+    if msg in confirmacoes and reagendando:
+        ag = supabase.table("agendamentos").select("nova_data", "nova_hora").eq("cod_id", cod_id).limit(1).execute().data
+        if ag and ag[0].get("nova_data") and ag[0].get("nova_hora"):
+            nova_data = ag[0]["nova_data"]
+            nova_hora = ag[0]["nova_hora"]
+            supabase.table("agendamentos").update({
+                "date": nova_data,
+                "horas": nova_hora,
+                "status": "Confirmado",
+                "reagendando": False,
+                "nova_data": None,
+                "nova_hora": None
+            }).eq("cod_id", cod_id).execute()
+            send_message(resp, f"Perfeito {nome}! Sua consulta foi remarcada para {format_date(nova_data)} às {nova_hora}.")
+            return str(resp), 200, {"Content-Type": "text/xml"}
+        send_message(resp, "Faltam informações da nova data ou hora. Por favor, envie novamente.")
+        return str(resp), 200, {"Content-Type": "text/xml"}
+
+    if msg in negacoes and reagendando:
+        supabase.table("agendamentos").update({"nova_data": None, "nova_hora": None}).eq("cod_id", cod_id).execute()
+        send_message(resp, "Ok, por favor envie uma nova data ou horário para reagendar.")
+        return str(resp), 200, {"Content-Type": "text/xml"}
+        
     if msg == "y":
         supabase.table("agendamentos").update({"status": "Confirmado", "reagendando": False}).eq("cod_id", cod_id).execute()
         send_message(resp, f"Merci {nome}! Votre rendez-vous est confirmé.")
