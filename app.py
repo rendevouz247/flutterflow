@@ -66,19 +66,21 @@ def traduzir(texto: str, destino: str) -> str:
 
 def parse_date_from_text(text):
     try:
-        # Normaliza strings como "às 10:00", "as 10:00", "de manhã", "à tarde", "no fim do dia"
         text = text.strip().lower()
-        text = re.sub(r"(às|as|a|à|ao|no|na|de|em|por|ao\s+)?", "", text)
 
-        # Interpretação direta de partes do dia
+        # Verifica se a frase contém uma hora explícita
+        hora_match = re.search(r"(\d{1,2})([:h])(\d{2})", text)
+        if hora_match:
+            hora_formatada = hora_match.group(1).zfill(2) + ":" + hora_match.group(3).zfill(2) + ":00"
+            return hora_formatada
+
+        # Frases genéricas para períodos do dia
         if "manhã" in text:
             return "09:00:00"
         if "tarde" in text:
             return "14:00:00"
         if "noite" in text:
             return "19:00:00"
-        if re.match(r"^\d{1,2}[:h]\d{2}(:\d{2})?$", text.strip()):
-            return HORA_FLAG
 
         idioma = detectar_idioma(text)
         hoje = datetime.now().strftime("%d %B %Y")
@@ -87,19 +89,21 @@ def parse_date_from_text(text):
             model="llama3-8b-8192",
             messages=[
                 {"role": "system", "content": (
-                    f"Tu es un assistant JSON. Ta tâche est d'extraire une date future à partir d'une phrase dans la langue '{idioma}' (ex: 'le 19 mai', 'demain', 'segunda-feira'). "
-                    f"Aujourd'hui, c'est le {hoje}. Si l'année ou la semaine n'est pas mentionnée, choisis toujours la prochaine occurrence future à partir de cette date. "
-                    "Réponds uniquement en JSON comme { \"date\": \"2025-05-03\" }. Si aucune date n'est trouvée, retourne { \"date\": null }. Ne retourne aucun texte ou commentaire."
+                    f"Tu es un assistant JSON. Ta tâche est d'extraire une date future à partir d'une phrase dans la langue '{idioma}' "
+                    f"(ex: 'le 19 mai', 'demain', 'segunda-feira'). Aujourd'hui, c'est le {hoje}. "
+                    "Réponds uniquement en JSON comme { \"date\": \"2025-05-03\" }. Si aucune date n'est trouvée, retourne { \"date\": null }."
                 )},
                 {"role": "user", "content": text}
             ]
         )
         raw = nlu.choices[0].message.content.strip()
-        app.logger.info(f"\U0001F9E0 Resposta IA bruta: {raw}")
+        app.logger.info(f"🧠 Resposta IA bruta: {raw}")
         result = json.loads(raw)
         value = result.get("date")
+
         if value in [None, "YYYY-MM-DD"]:
             return None
+
         value = value.split("T")[0] if "T" in value else value
 
         now = datetime.now()
@@ -111,6 +115,7 @@ def parse_date_from_text(text):
             dt = dt.replace(year=dt.year + 1)
 
         return dt.date().isoformat()
+
     except Exception as e:
         app.logger.info(f"❌ Erro ao extrair data: {e}")
         return None
