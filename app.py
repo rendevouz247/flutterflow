@@ -21,7 +21,7 @@ groq_client  = Groq(api_key=GROQ_API_KEY)
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
-RUNCATE_LIMIT = 500
+TRUNCATE_LIMIT = 500
 
 HORA_FLAG = "HORA_SELECIONADA"
 
