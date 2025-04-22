@@ -20,6 +20,14 @@ groq_client  = Groq(api_key=GROQ_API_KEY)
 
 app = Flask(__name__)
 
+def truncate(text: str, limit: int = 800) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit-3] + "..."
+
+def send_message(resp: MessagingResponse, text: str):
+    resp.message(truncate(text))
+
 def format_slot(date_str, time_str):
     dt = datetime.fromisoformat(f"{date_str}T{time_str}")
     return dt.strftime("%d/%m/%Y %H:%M")
@@ -43,7 +51,7 @@ def sms_reply():
         .data
     )
     if not ag:
-        resp.message("Aucun rendez-vous trouvé pour ce numéro.")
+        send_message(resp, "Aucun rendez-vous trouvé pour ce numéro.")
         return str(resp), 200, {"Content-Type": "text/xml"}
 
     a      = ag[0]
@@ -51,13 +59,13 @@ def sms_reply():
     cod_id = a["cod_id"]
     comp   = a["company_id"]
 
-    # 2) Fluxo estrito: só aceita Y, N ou R
+    # 2) Fluxo estrito: só Y, N ou R
     if msg == "y":
         supabase.table("agendamentos") \
             .update({"status": "Confirmado"}) \
             .eq("cod_id", cod_id) \
             .execute()
-        resp.message(f"Merci {nome}! Votre rendez-vous est confirmé.")
+        send_message(resp, f"Merci {nome}! Votre rendez-vous est confirmé.")
         return str(resp), 200, {"Content-Type": "text/xml"}
 
     if msg == "n":
@@ -65,7 +73,7 @@ def sms_reply():
             .update({"status": "Annulé"}) \
             .eq("cod_id", cod_id) \
             .execute()
-        resp.message(f"D'accord {nome}, votre rendez-vous a été annulé.")
+        send_message(resp, f"D'accord {nome}, votre rendez-vous a été annulé.")
         return str(resp), 200, {"Content-Type": "text/xml"}
 
     if msg == "r":
@@ -75,7 +83,7 @@ def sms_reply():
                 model="llama3-8b-8192",
                 messages=[
                     {"role": "system", "content": (
-                        "Você é um analisador de intenções. Retorne JSON com:\n"
+                        "Você é analisador de intenções. Retorne JSON com:\n"
                         "- action: 'reschedule' ou 'check_availability'\n"
                         "- datetime (YYYY-MM-DD HH:MM) se houver data+hora\n"
                         "- date (YYYY-MM-DD) se houver apenas data\n"
@@ -101,7 +109,7 @@ def sms_reply():
                 .execute()
             rd = datetime.fromisoformat(f"{date_new}T{time_new}") \
                      .strftime("%d/%m/%Y à %H:%M")
-            resp.message(f"Parfait {nome}! Reprogrammé pour le {rd}.")
+            send_message(resp, f"Parfait {nome}! Reprogrammé pour le {rd}.")
             return str(resp), 200, {"Content-Type": "text/xml"}
 
         # 3b) Check availability em data específica
@@ -144,7 +152,7 @@ def sms_reply():
                     + (", ".join(times) if times else "aucun")
                 )
 
-            resp.message(rep)
+            send_message(resp, rep)
             return str(resp), 200, {"Content-Type": "text/xml"}
 
         # 3c) Lista próximos 9 slots
@@ -170,18 +178,19 @@ def sms_reply():
                 break
 
         if not slots:
-            resp.message("Désolé, aucune date disponible pour le moment.")
+            send_message(resp, "Désolé, aucune date disponible pour le moment.")
         else:
             menu = "\n".join(
                 f"{i+1}) {format_slot(d, h)}"
                 for i, (d, h) in enumerate(slots)
             )
-            resp.message("Veuillez choisir une nouvelle date :\n\n" + menu)
+            send_message(resp, "Veuillez choisir une nouvelle date :\n\n" + menu)
 
         return str(resp), 200, {"Content-Type": "text/xml"}
 
     # 4) Qualquer outra mensagem
-    resp.message(
+    send_message(
+        resp,
         "Merci ! Répondez avec Y pour confirmer, N pour annuler ou R pour reprogrammer."
     )
     return str(resp), 200, {"Content-Type": "text/xml"}
