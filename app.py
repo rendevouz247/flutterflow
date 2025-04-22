@@ -101,41 +101,41 @@ def sms_reply():
                 send_message(resp, "Désolé, je n'ai pas compris la date. Essayez à nouveau en indiquant un jour précis (ex: 'demain', 'lundi', 'le 3 mai').")
                 return str(resp), 200, {"Content-Type": "text/xml"}
                 
-        def get_available_times(date):
-            rows = (
-                supabase
-                .from_("view_horas_disponiveis")
-                .select("horas_disponiveis")
-                .eq("company_id", comp)
-                .eq("date", date)
-                .execute()
-                .data
-            )
-            times = []
-            for r in rows:
-                j = r.get("horas_disponiveis") or {}
-                times += j.get("disponiveis", [])
-            return sorted(set(times))
+            def get_available_times(date):
+                rows = (
+                    supabase
+                    .from_("view_horas_disponiveis")
+                    .select("horas_disponiveis")
+                    .eq("company_id", comp)
+                    .eq("date", date)
+                    .execute()
+                    .data
+                )
+                times = []
+                for r in rows:
+                    j = r.get("horas_disponiveis") or {}
+                    times += j.get("disponiveis", [])
+                return sorted(set(times))
+    
+            current = preferred_date
+            options = get_available_times(current)
 
-        current = preferred_date
-        options = get_available_times(current)
-
-        if options:
-            send_message(resp, f"Voici les horaires disponibles pour le {format_date(current)}:\n" + ", ".join(options))
-        else:
-            prev_day = (datetime.fromisoformat(current) - timedelta(days=1)).strftime("%Y-%m-%d")
-            next_day = (datetime.fromisoformat(current) + timedelta(days=1)).strftime("%Y-%m-%d")
-            prev_options = get_available_times(prev_day)
-            next_options = get_available_times(next_day)
-
-            reply = f"Désolé, aucun horaire disponible le {format_date(current)}"
-            if prev_options:
-                reply += f". Mais il y en a le {format_date(prev_day)}: {', '.join(prev_options)}"
-            if next_options:
-                reply += f". Et aussi le {format_date(next_day)}: {', '.join(next_options)}"
-            send_message(resp, reply)
-
-        return str(resp), 200, {"Content-Type": "text/xml"}
+            if options:
+                send_message(resp, f"Voici les horaires disponibles pour le {format_date(current)}:\n" + ", ".join(options))
+            else:
+                prev_day = (datetime.fromisoformat(current) - timedelta(days=1)).strftime("%Y-%m-%d")
+                next_day = (datetime.fromisoformat(current) + timedelta(days=1)).strftime("%Y-%m-%d")
+                prev_options = get_available_times(prev_day)
+                next_options = get_available_times(next_day)
+    
+                reply = f"Désolé, aucun horaire disponible le {format_date(current)}"
+                if prev_options:
+                    reply += f". Mais il y en a le {format_date(prev_day)}: {', '.join(prev_options)}"
+                if next_options:
+                    reply += f". Et aussi le {format_date(next_day)}: {', '.join(next_options)}"
+                send_message(resp, reply)
+    
+            return str(resp), 200, {"Content-Type": "text/xml"}
 
     # Se não entendeu a resposta
     send_message(resp, "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.")
