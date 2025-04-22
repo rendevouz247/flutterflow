@@ -37,17 +37,22 @@ def parse_date_from_text(text):
             model="mixtral-8x7b-32768",
             messages=[
                 {"role": "system", "content": (
-                    "Tu es un assistant qui extrait une date future mentionnée dans un texte en français (ex: 'le 19 mai', 'demain', 'lundi prochain'). "
-                    "Retourne uniquement un JSON: { \"date\": \"YYYY-MM-DD\" } ou { \"date\": null } si aucune date valide n'est trouvée."
+                    "Tu es un assistant JSON. Ta tâche est d'extraire une date future à partir d'une phrase en français (ex: 'le 19 mai', 'demain', 'lundi prochain'). "
+                    "Réponds uniquement en JSON avec ce format exact: { \"date\": \"YYYY-MM-DD\" }. "
+                    "Si tu ne trouves aucune date, réponds: { \"date\": null }. "
+                    "Ne parle pas, ne fais aucun commentaire, ne formate pas le JSON, retourne une ligne unique."
                 )},
                 {"role": "user", "content": text}
             ]
         )
-        result = json.loads(nlu.choices[0].message.content)
+        raw = nlu.choices[0].message.content.strip()
+        print("🧠 Resposta IA bruta:", raw)
+        result = json.loads(raw)
         return result.get("date")
     except Exception as e:
         print("❌ Erro ao extrair data:", e)
         return None
+
 
 @app.route("/sms", methods=["POST"])
 def sms_reply():
