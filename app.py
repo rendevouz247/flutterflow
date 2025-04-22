@@ -41,7 +41,10 @@ def sms_reply():
 
     if not ag:
         resp.message("Aucun rendez-vous trouvé pour ce numéro.")
-        return str(resp), 200, {"Content‑Type":"text/xml"}
+        response = str(resp)
+        headers  = {"Content-Type": "text/xml"}
+        return response, 200, headers
+
 
     a      = ag[0]
     nome   = a.get("name_user", "Client")
@@ -54,14 +57,20 @@ def sms_reply():
             .update({"status":"Confirmado"}) \
             .eq("cod_id",cod_id).execute()
         resp.message(f"Merci {nome}! Votre rendez-vous est confirmé.")
-        return str(resp), 200, {"Content‑Type":"text/xml"}
+        response = str(resp)
+        headers  = {"Content-Type": "text/xml"}
+        return response, 200, headers
+
 
     if msg == "n":
         supabase.table("agendamentos") \
             .update({"status":"Annulé"}) \
             .eq("cod_id",cod_id).execute()
         resp.message(f"D'accord {nome}, votre rendez-vous a été annulé.")
-        return str(resp), 200, {"Content‑Type":"text/xml"}
+        response = str(resp)
+        headers  = {"Content-Type": "text/xml"}
+        return response, 200, headers
+
 
     if msg == "r":
         # 3) Aqui sim chamamos a IA para interpretar ou listar opções
@@ -100,7 +109,10 @@ def sms_reply():
             rd = datetime.fromisoformat(f"{date_new}T{time_new}") \
                    .strftime("%d/%m/%Y à %H:%M")
             resp.message(f"Parfait {nome}! Reprogrammé pour le {rd}.")
-            return str(resp), 200, {"Content‑Type":"text/xml"}
+            response = str(resp)
+            headers  = {"Content-Type": "text/xml"}
+            return response, 200, headers
+
 
         # Se veio apenas date, checa disponibilidade naquela data
         if intent.get("action") == "check_availability" and intent.get("date"):
@@ -130,7 +142,10 @@ def sms_reply():
                     + (", ".join(horas) if horas else "aucun")
                 )
             resp.message(rep)
-            return str(resp), 200, {"Content‑Type":"text/xml"}
+            response = str(resp)
+            headers  = {"Content-Type": "text/xml"}
+            return response, 200, headers
+
 
         # Caso não tenha data/hora no JSON, listamos as próximas 9 slots
         amanhã = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -153,18 +168,26 @@ def sms_reply():
             resp.message(
                 "Veuillez choisir une nouvelle date en répondant par le numéro :\n\n" + texto
             )
-        return str(resp), 200, {"Content‑Type":"text/xml"}
+        response = str(resp)
+        headers  = {"Content-Type": "text/xml"}
+        return response, 200, headers
+
 
     # 4) Qualquer outra mensagem cai aqui
     resp.message(
         "Merci ! Répondez avec Y pour confirmer, N pour annuler ou R pour reprogrammer."
     )
-    return str(resp), 200, {"Content‑Type":"text/xml"}
-
+    response = str(resp)
+    headers  = {"Content-Type": "text/xml"}
+    return response, 200, headers
+    
 
     # Se nenhum dos casos acima, manda instrução padrão
     resp.message("Merci ! Répondez avec Y pour confirmer, N pour annuler, ou indiquez une date (ex: 30/04) pour vérifier la disponibilité.")
-    return Response(str(resp), mimetype="text/xml")
+    response = str(resp)
+    headers  = {"Content-Type": "text/xml"}
+    return response, 200, headers
+
 
 
 if __name__ == "__main__":
