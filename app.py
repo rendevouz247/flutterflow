@@ -21,16 +21,17 @@ groq_client  = Groq(api_key=GROQ_API_KEY)
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
+
+
 TRUNCATE_LIMIT = 500
-
 HORA_FLAG = "HORA_SELECIONADA"
-
 
 def truncate(text: str, limit: int = TRUNCATE_LIMIT) -> str:
     return text if len(text) <= limit else text[: limit - 3] + "..."
 
-def send_message(resp: MessagingResponse, text: str):
-    resp.message(truncate(text))
+def send_message(resp: MessagingResponse, text: str, lang: str = "fr"):
+    translated = traduzir(text, lang) if lang != "fr" else text
+    resp.message(truncate(translated))
 
 def format_date(date_str: str) -> str:
     return datetime.fromisoformat(date_str).strftime("%d/%m/%Y")
@@ -51,27 +52,38 @@ def get_available_times(date: str, company_id: str) -> list:
         times += j.get("disponiveis", [])
     return sorted(set(times))
 
+def detectar_idioma(texto):
+    try:
+        return GoogleTranslator(source='auto', target='en').detect(texto)
+    except:
+        return 'fr'
+
+def traduzir(texto: str, destino: str) -> str:
+    try:
+        return GoogleTranslator(source='fr', target=destino).translate(texto)
+    except:
+        return texto
+
 def parse_date_from_text(text):
     try:
         if re.match(r"^\d{1,2}[:h]\d{2}(:\d{2})?$", text.strip()):
             return HORA_FLAG
 
+        idioma = detectar_idioma(text)
+
         nlu = groq_client.chat.completions.create(
             model="llama3-8b-8192",
             messages=[
                 {"role": "system", "content": (
-                    "Tu es un assistant JSON. Ta tâche est d'extraire une date FUTURE à partir d'une phrase en français (ex: 'le 19 mai', 'demain', 'lundi prochain'). "
-                    "Aujourd'hui, c'est le 22 avril 2025. Si l'année ou la semaine n'est pas mentionnée, choisis toujours la prochaine occurrence FUTURE à partir de cette date. "
-                    "Réponds uniquement en JSON comme { \"date\": \"2025-05-03\" }. Si tu ne trouves aucune date, retourne { \"date\": null }. "
-                    "Ne retourne aucun texte ou commentaire, seulement le JSON."
-
-
+                    f"Tu es un assistant JSON. Ta tâche est d'extraire une date future à partir d'une phrase dans la langue '{idioma}' (ex: 'le 19 mai', 'demain', 'segunda-feira'). "
+                    "Aujourd'hui, c'est le 22 avril 2025. Si l'année ou la semaine n'est pas mentionnée, choisis toujours la prochaine occurrence future à partir de cette date. "
+                    "Réponds uniquement en JSON comme { \"date\": \"2025-05-03\" }. Si aucune date n'est trouvée, retourne { \"date\": null }. Ne retourne aucun texte ou commentaire."
                 )},
                 {"role": "user", "content": text}
             ]
         )
         raw = nlu.choices[0].message.content.strip()
-        app.logger.info(f"🧠 Resposta IA bruta: {raw}")
+        app.logger.info(f"\U0001F9E0 Resposta IA bruta: {raw}")
         result = json.loads(raw)
         value = result.get("date")
         if value in [None, "YYYY-MM-DD"]:
