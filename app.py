@@ -21,8 +21,9 @@ groq_client  = Groq(api_key=GROQ_API_KEY)
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
-
 TRUNCATE_LIMIT = 500
+
+HORA_FLAG = "HORA_SELECIONADA"
 
 def truncate(text: str, limit: int = TRUNCATE_LIMIT) -> str:
     return text if len(text) <= limit else text[: limit - 3] + "..."
@@ -51,6 +52,9 @@ def get_available_times(date: str, company_id: str) -> list:
 
 def parse_date_from_text(text):
     try:
+        if re.match(r"^\d{1,2}[:h]\d{2}$", text.strip()):
+            return HORA_FLAG
+
         nlu = groq_client.chat.completions.create(
             model="llama3-8b-8192",
             messages=[
@@ -75,27 +79,16 @@ def parse_date_from_text(text):
         now = datetime.now()
         dt = datetime.fromisoformat(value)
 
-        # Sempre força para ano atual se IA mandou ano passado
         if dt.year < now.year:
             dt = dt.replace(year=now.year)
-
-        # Se ainda estiver no passado mesmo com o ano ajustado, joga para ano seguinte
         if dt < now:
             dt = dt.replace(year=dt.year + 1)
 
-        date_final = dt.date().isoformat()
-
-        # Busca e loga horários disponíveis
-        horarios = get_available_times(date_final, company_id="1")
-        if horarios:
-            app.logger.info(f"⏰ Horários para {date_final}: {', '.join(horarios)}")
-
-        return date_final
+        return dt.date().isoformat()
     except Exception as e:
         app.logger.info(f"❌ Erro ao extrair data: {e}")
         return None
 
-        
 @app.route("/sms", methods=["POST"])
 def sms_reply():
     msg = request.form.get("Body", "").strip().lower()
@@ -125,6 +118,7 @@ def sms_reply():
     cod_id = a["cod_id"]
     comp = a["company_id"]
     reagendando = a.get("reagendando", False)
+    nova_data = a.get("nova_data")
 
     if msg == "y":
         supabase.table("agendamentos").update({"status": "Confirmado", "reagendando": False}).eq("cod_id", cod_id).execute()
@@ -138,62 +132,50 @@ def sms_reply():
 
     if msg == "r":
         supabase.table("agendamentos").update({"reagendando": True}).eq("cod_id", cod_id).execute()
-        reagendando = True
         send_message(resp, "Avez-vous un jour de préférence pour reprogrammer ? Vous pouvez répondre par 'demain', 'lundi', 'le 3 mai', etc.")
         return str(resp), 200, {"Content-Type": "text/xml"}
 
-    if msg == "oui":
-        ag = (
-            supabase
-            .table("agendamentos")
-            .select("nova_data")
-            .eq("user_phone", frm)
-            .eq("cod_id", cod_id)
-            .limit(1)
-            .execute()
-            .data
-        )
-        if ag and ag[0].get("nova_data"):
-            nova_data = ag[0]["nova_data"]
-            supabase.table("agendamentos").update({
-                "date": nova_data,
-                "status": "Confirmado",
-                "reagendando": False,
-                "nova_data": None
-            }).eq("cod_id", cod_id).execute()
-            send_message(resp, f"Parfait {nome}! Votre rendez-vous a été reprogrammé pour le {format_date(nova_data)}.")
+    if reagendando and msg and re.match(r"^\d{1,2}[:h]\d{2}$", msg):
+        if not nova_data:
+            send_message(resp, "Veuillez d'abord m'indiquer une date avant de choisir une heure 😉")
             return str(resp), 200, {"Content-Type": "text/xml"}
 
-    if msg == "non":
-        supabase.table("agendamentos").update({"nova_data": None}).eq("cod_id", cod_id).execute()
-        send_message(resp, "D'accord, dites-moi une nouvelle date pour reprogrammer.")
+        hora_formatada = msg.replace("h", ":") + ":00"
+        horarios_disponiveis = get_available_times(nova_data, company_id=comp)
+        if hora_formatada not in horarios_disponiveis:
+            send_message(resp, f"Désolé, l'heure {hora_formatada[:5]} n'est pas disponible pour le {format_date(nova_data)}.")
+            return str(resp), 200, {"Content-Type": "text/xml"}
+
+        supabase.table("agendamentos").update({
+            "date": nova_data,
+            "horas": hora_formatada,
+            "status": "Confirmado",
+            "reagendando": False,
+            "nova_data": None
+        }).eq("cod_id", cod_id).execute()
+
+        send_message(resp, f"Parfait {nome}! Votre rendez-vous a été reprogrammé pour le {format_date(nova_data)} à {hora_formatada[:5]}.")
         return str(resp), 200, {"Content-Type": "text/xml"}
 
-    # AQUI sim roda IA, se ainda está em modo de reagendamento e msg for nova data
-    if reagendando:
-        preferred_date_raw = parse_date_from_text(msg)
-        app.logger.info(f"📅 Data extraída: {preferred_date_raw}")
+    preferred_date_raw = parse_date_from_text(msg)
+    app.logger.info(f"📅 Data extraída: {preferred_date_raw}")
 
-        if preferred_date_raw:
-            try:
-                datetime.fromisoformat(preferred_date_raw)
-            except ValueError:
-                send_message(resp, "Désolé, je n'ai pas compris la date. Essayez à nouveau en indiquant un jour précis (ex: 'demain', 'lundi', 'le 3 mai').")
-                return str(resp), 200, {"Content-Type": "text/xml"}
-
-            horarios = get_available_times(preferred_date_raw, company_id=comp)
-            if horarios:
-                texto = f"Voici les horaires disponibles pour le {format_date(preferred_date_raw)}:\n" + ", ".join(horarios)
-            else:
-                texto = f"Aucun horaire disponible pour le {format_date(preferred_date_raw)}. Souhaitez-vous choisir un autre jour?"
-
-            supabase.table("agendamentos").update({"nova_data": preferred_date_raw}).eq("cod_id", cod_id).execute()
-            send_message(resp, texto + "\n\nRépondez OUI pour confirmer ou NON pour une autre date.")
+    if reagendando and preferred_date_raw and preferred_date_raw != HORA_FLAG:
+        try:
+            datetime.fromisoformat(preferred_date_raw)
+        except ValueError:
+            send_message(resp, "Désolé, je n'ai pas compris la date. Essayez à nouveau en indiquant un jour précis (ex: 'demain', 'lundi', 'le 3 mai').")
             return str(resp), 200, {"Content-Type": "text/xml"}
 
-    app.logger.info("⚠️ Caiu na message padrão final")
-    send_message(resp, "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.")
-    return str(resp), 200, {"Content-Type": "text/xml"}
+        horarios = get_available_times(preferred_date_raw, company_id=comp)
+        if horarios:
+            texto = f"Voici les horaires disponibles pour le {format_date(preferred_date_raw)}:\n" + ", ".join(horarios)
+        else:
+            texto = f"Aucun horaire disponible pour le {format_date(preferred_date_raw)}. Souhaitez-vous choisir un autre jour?"
+
+        supabase.table("agendamentos").update({"nova_data": preferred_date_raw}).eq("cod_id", cod_id).execute()
+        send_message(resp, texto + "\n\nRépondez avec l'heure souhaitée (ex: 09:00) ou un autre jour.")
+        return str(resp), 200, {"Content-Type": "text/xml"}
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
