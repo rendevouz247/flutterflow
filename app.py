@@ -50,7 +50,7 @@ def parse_date_from_text(text):
         result = json.loads(raw)
         return result.get("date")
     except Exception as e:
-        print("❌ Erro ao extrair data:", e)
+        app.logger.info("❌ Erro ao extrair data:", e)
         return None
 
 @app.route("/sms", methods=["POST"])
@@ -59,7 +59,7 @@ def sms_reply():
     frm = request.form.get("From")
     resp = MessagingResponse()
 
-    print(f"📩 MSG RECEBIDA: {msg}")
+    app.logger.info(f"📩 MSG RECEBIDA: {msg}")
 
     ag = (
         supabase
@@ -104,7 +104,7 @@ def sms_reply():
 
     if reagendando:
         preferred_date = parse_date_from_text(msg)
-        print("📅 Data extraída:", preferred_date)
+        app.logger.info("📅 Data extraída:", preferred_date)
 
         if preferred_date:
             try:
@@ -150,7 +150,7 @@ def sms_reply():
 
             return str(resp), 200, {"Content-Type": "text/xml"}
 
-    print("⚠️ Caiu na mensagem padrão final")
+    app.logger.info("⚠️ Caiu na mensagem padrão final")
     send_message(resp, "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.")
     return str(resp), 200, {"Content-Type": "text/xml"}
 
