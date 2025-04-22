@@ -5,6 +5,10 @@ from twilio.twiml.messaging_response import MessagingResponse
 from datetime import datetime, timedelta
 from groq import Groq
 import os, json, re
+import logging
+app.logger.setLevel(logging.INFO)
+
+
 
 # CONFIG
 SUPABASE_URL  = os.getenv("SUPABASE_URL")
