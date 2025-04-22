@@ -1,10 +1,12 @@
 from flask import Flask, request, Response
 from supabase import create_client, Client as SupabaseClient
 from twilio.rest import Client as TwilioClient
+from twilio.twiml.messaging_response import MessagingResponse
 from datetime import datetime, timedelta
 from groq import Groq
 from deep_translator import GoogleTranslator
 import os, json, re
+
 
 # CONFIG
 SUPABASE_URL = os.getenv("SUPABASE_URL")
