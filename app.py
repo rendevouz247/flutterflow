@@ -54,7 +54,7 @@ def parse_date_from_text(text):
         value = result.get("date")
         if value in [None, "YYYY-MM-DD"]:
             return None
-        return value)
+        return value
     except Exception as e:
         app.logger.info(f"❌ Erro ao extrair data: {e}")
         return None
