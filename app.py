@@ -59,6 +59,8 @@ def sms_reply():
     frm = request.form.get("From")
     resp = MessagingResponse()
 
+    print(f"📩 MSG RECEBIDA: {msg}")
+
     ag = (
         supabase
         .table("agendamentos")
@@ -93,9 +95,12 @@ def sms_reply():
 
     if msg == "r":
         supabase.table("agendamentos").update({"reagendando": True}).eq("cod_id", cod_id).execute()
-        reagendando = True  # Atualiza também na memória local
+        reagendando = True
         send_message(resp, "Avez-vous un jour de préférence pour reprogrammer ? Vous pouvez répondre par 'demain', 'lundi', 'le 3 mai', etc.")
         return str(resp), 200, {"Content-Type": "text/xml"}
+
+    # DEBUG FORÇANDO IA TEMPORARIAMENTE:
+    # reagendando = True
 
     if reagendando:
         preferred_date = parse_date_from_text(msg)
@@ -145,6 +150,7 @@ def sms_reply():
 
             return str(resp), 200, {"Content-Type": "text/xml"}
 
+    print("⚠️ Caiu na mensagem padrão final")
     send_message(resp, "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.")
     return str(resp), 200, {"Content-Type": "text/xml"}
 
