@@ -135,12 +135,15 @@ def sms_reply():
         send_message(resp, "Avez-vous un jour de préférence pour reprogrammer ? Vous pouvez répondre par 'demain', 'lundi', 'le 3 mai', etc.")
         return str(resp), 200, {"Content-Type": "text/xml"}
 
-    if reagendando and msg and re.match(r"^\d{1,2}[:h]\d{2}$", msg):
+    if reagendando and msg and re.match(r"^\d{1,2}[:h]\d{2}(:\d{2})?$", msg):
         if not nova_data:
             send_message(resp, "Veuillez d'abord m'indiquer une date avant de choisir une heure 😉")
             return str(resp), 200, {"Content-Type": "text/xml"}
 
-        hora_formatada = msg.replace("h", ":") + ":00"
+        hora_formatada = msg.replace("h", ":")
+        if len(hora_formatada.split(":")) == 2:
+            hora_formatada += ":00"
+
         horarios_disponiveis = get_available_times(nova_data, company_id=comp)
         if hora_formatada not in horarios_disponiveis:
             send_message(resp, f"Désolé, l'heure {hora_formatada[:5]} n'est pas disponible pour le {format_date(nova_data)}.")
@@ -167,15 +170,23 @@ def sms_reply():
             send_message(resp, "Désolé, je n'ai pas compris la date. Essayez à nouveau en indiquant un jour précis (ex: 'demain', 'lundi', 'le 3 mai').")
             return str(resp), 200, {"Content-Type": "text/xml"}
 
-        horarios = get_available_times(preferred_date_raw, company_id=comp)
-        if horarios:
-            texto = f"Voici les horaires disponibles pour le {format_date(preferred_date_raw)}:\n" + ", ".join(horarios)
+        horaires = get_available_times(preferred_date_raw, company_id=comp)
+        if horaires:
+            texto = f"Voici les horaires disponibles pour le {format_date(preferred_date_raw)}:\n" + ", ".join(horaires)
         else:
             texto = f"Aucun horaire disponible pour le {format_date(preferred_date_raw)}. Souhaitez-vous choisir un autre jour?"
 
         supabase.table("agendamentos").update({"nova_data": preferred_date_raw}).eq("cod_id", cod_id).execute()
         send_message(resp, texto + "\n\nRépondez avec l'heure souhaitée (ex: 09:00) ou un autre jour.")
         return str(resp), 200, {"Content-Type": "text/xml"}
+
+    if not reagendando:
+        send_message(resp, "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.")
+        return str(resp), 200, {"Content-Type": "text/xml"}
+
+    app.logger.info("⚠️ Caiu na message padrão final")
+    send_message(resp, "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.")
+    return str(resp), 200, {"Content-Type": "text/xml"}
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
