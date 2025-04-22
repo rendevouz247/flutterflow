@@ -33,6 +33,22 @@ def send_message(resp: MessagingResponse, text: str):
 def format_date(date_str: str) -> str:
     return datetime.fromisoformat(date_str).strftime("%d/%m/%Y")
 
+def get_available_times(date: str, company_id: str) -> list:
+    rows = (
+        supabase
+        .from_("view_horas_disponiveis")
+        .select("horas_disponiveis")
+        .eq("company_id", company_id)
+        .eq("date", date)
+        .execute()
+        .data
+    )
+    times = []
+    for r in rows:
+        j = r.get("horas_disponiveis") or {}
+        times += j.get("disponiveis", [])
+    return sorted(set(times))
+
 def parse_date_from_text(text):
     try:
         nlu = groq_client.chat.completions.create(
@@ -41,7 +57,7 @@ def parse_date_from_text(text):
                 {"role": "system", "content": (
                     "Tu es un assistant JSON. Ta tâche est d'extraire une date future à partir d'une phrase en français (ex: 'le 19 mai', 'demain', 'lundi prochain'). "
                     "Si l'année n'est pas mentionnée, utilise l'année actuelle. Si la date est passée, utilise l'année suivante. "
-                    "Réponds uniquement en JSON comme ceci: { \"date\": \"2025-05-03\" } avec une vraie date future. Jamais retourner \"YYYY-MM-DD\"."
+                    "Réponds uniquement en JSON comme ceci: { \"date\": \"2025-05-03\" } avec une vraie date future. Jamais retourner \"YYYY-MM-DD\". "
                     "Si tu ne trouves aucune date, réponds: { \"date\": null }. "
                     "Ne parle pas, ne fais aucun commentaire, ne formate pas le JSON, retourne une ligne unique."
                 )},
@@ -54,7 +70,24 @@ def parse_date_from_text(text):
         value = result.get("date")
         if value in [None, "YYYY-MM-DD"]:
             return None
-        return value
+        value = value.split("T")[0] if "T" in value else value
+
+        # Corrige ano se IA retornou passado
+        now = datetime.now()
+        dt = datetime.fromisoformat(value)
+        if dt.year < now.year:
+            dt = dt.replace(year=now.year)
+            if dt < now:
+                dt = dt.replace(year=now.year + 1)
+
+        date_final = dt.date().isoformat()
+
+        # Busca e loga horários disponíveis
+        horarios = get_available_times(date_final, company_id="1")
+        if horarios:
+            app.logger.info(f"⏰ Horários para {date_final}: {', '.join(horarios)}")
+
+        return date_final
     except Exception as e:
         app.logger.info(f"❌ Erro ao extrair data: {e}")
         return None
@@ -137,30 +170,21 @@ def sms_reply():
         preferred_date_raw = parse_date_from_text(msg)
         app.logger.info(f"📅 Data extraída: {preferred_date_raw}")
 
-        # Corrige ano se IA retornou passado
         if preferred_date_raw:
             try:
-                dt = datetime.fromisoformat(preferred_date_raw)
-                now = datetime.now()
-                if dt.year < now.year:
-                    dt = dt.replace(year=now.year)
-                    if dt < now:
-                        dt = dt.replace(year=now.year + 1)
-                preferred_date = dt.date().isoformat()
-            except:
-                preferred_date = None
-        else:
-            preferred_date = None
-
-        if preferred_date:
-            try:
-                datetime.fromisoformat(preferred_date)
+                datetime.fromisoformat(preferred_date_raw)
             except ValueError:
                 send_message(resp, "Désolé, je n'ai pas compris la date. Essayez à nouveau en indiquant un jour précis (ex: 'demain', 'lundi', 'le 3 mai').")
                 return str(resp), 200, {"Content-Type": "text/xml"}
 
-            supabase.table("agendamentos").update({"nova_data": preferred_date}).eq("cod_id", cod_id).execute()
-            send_message(resp, f"Souhaitez-vous reprogrammer pour le {format_date(preferred_date)} ? Répondez OUI pour confirmer ou NON pour choisir une autre date.")
+            horarios = get_available_times(preferred_date_raw, company_id=comp)
+            if horarios:
+                texto = f"Voici les horaires disponibles pour le {format_date(preferred_date_raw)}:\n" + ", ".join(horarios)
+            else:
+                texto = f"Aucun horaire disponible pour le {format_date(preferred_date_raw)}. Souhaitez-vous choisir un autre jour?"
+
+            supabase.table("agendamentos").update({"nova_data": preferred_date_raw}).eq("cod_id", cod_id).execute()
+            send_message(resp, texto + "\n\nRépondez OUI pour confirmer ou NON pour une autre date.")
             return str(resp), 200, {"Content-Type": "text/xml"}
 
     app.logger.info("⚠️ Caiu na message padrão final")
