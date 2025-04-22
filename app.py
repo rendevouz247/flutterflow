@@ -31,14 +31,17 @@ def sms_reply():
     resp = MessagingResponse()
 
     # 1) Busca último agendamento “Agendado”
-    ag = supabase.table("agendamentos") \
-        .select("*") \
-        .eq("user_phone", frm) \
-        .eq("status", "Agendado") \
-        .order("date", desc=True) \
-        .limit(1) \
-        .execute().data
-
+    ag = (
+        supabase
+        .table("agendamentos")
+        .select("*")
+        .eq("user_phone", frm)
+        .eq("status", "Agendado")
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+        .data
+    )
     if not ag:
         resp.message("Aucun rendez-vous trouvé pour ce numéro.")
         return str(resp), 200, {"Content-Type": "text/xml"}
@@ -66,17 +69,16 @@ def sms_reply():
         return str(resp), 200, {"Content-Type": "text/xml"}
 
     if msg == "r":
-        # 3) Uso de IA apenas aqui
-        # 3a) Tenta NLU para checar se veio data/hora no próprio 'R'
+        # 3) IA NLU para 'R'
         try:
             nlu = groq_client.chat.completions.create(
                 model="llama3-8b-8192",
                 messages=[
                     {"role": "system", "content": (
-                        "Você é um analisador de intenções. Retorne apenas JSON com:\n"
+                        "Você é um analisador de intenções. Retorne JSON com:\n"
                         "- action: 'reschedule' ou 'check_availability'\n"
-                        "- datetime (YYYY-MM-DD HH:MM) se o usuário enviou data+hora\n"
-                        "- date (YYYY-MM-DD) se ele só enviou data\n"
+                        "- datetime (YYYY-MM-DD HH:MM) se houver data+hora\n"
+                        "- date (YYYY-MM-DD) se houver apenas data\n"
                     )},
                     {"role": "user", "content": msg}
                 ]
@@ -85,7 +87,7 @@ def sms_reply():
         except:
             intent = {"action": "list_slots"}
 
-        # 3b) Se veio datetime completo, aplica alteração imediata
+        # 3a) Reschedule com datetime
         if intent.get("action") == "reschedule" and intent.get("datetime"):
             date_new, time_new = intent["datetime"].split(" ")
             time_new += ":00"
@@ -97,66 +99,84 @@ def sms_reply():
                 }) \
                 .eq("cod_id", cod_id) \
                 .execute()
-            rep_date = datetime.fromisoformat(f"{date_new}T{time_new}") \
-                           .strftime("%d/%m/%Y à %H:%M")
-            resp.message(f"Parfait {nome}! Reprogrammé pour le {rep_date}.")
+            rd = datetime.fromisoformat(f"{date_new}T{time_new}") \
+                     .strftime("%d/%m/%Y à %H:%M")
+            resp.message(f"Parfait {nome}! Reprogrammé pour le {rd}.")
             return str(resp), 200, {"Content-Type": "text/xml"}
 
-        # 3c) Se veio só date, checa disponibilidade naquela data
+        # 3b) Check availability em data específica
         if intent.get("action") == "check_availability" and intent.get("date"):
             date_q = intent["date"]
-            slots = supabase.from_("view_horas_disponiveis") \
-                .select("horas") \
-                .eq("company_id", comp) \
-                .eq("date", date_q) \
-                .order("horas", desc=False) \
-                .execute().data
-            horas = [s["horas"][:5] for s in slots]
+            rows = (
+                supabase
+                .from_("view_horas_disponiveis")
+                .select("horas_disponiveis")
+                .eq("company_id", comp)
+                .eq("date", date_q)
+                .order("date", desc=False)
+                .execute()
+                .data
+            )
+            # extrai e unifica horários
+            times = []
+            for r in rows:
+                j = r.get("horas_disponiveis") or {}
+                times += j.get("disponiveis", [])
+            times = sorted(set(times))
 
-            # IA formata resposta
+            # IA formata a resposta
             try:
                 rep = groq_client.chat.completions.create(
                     model="llama3-8b-8192",
                     messages=[
                         {"role": "system", "content": (
-                            "Você é Luna, responda em francês listando horários ou dizendo que não há."
+                            "Você é Luna. Responda em francês listando horários ou dizendo que não há."
                         )},
                         {"role": "user", "content": (
-                            f"Data: {date_q}. Disponibilidades: {', '.join(horas) or 'nenhuma'}"
+                            f"Data: {date_q}. Disponibilités: {', '.join(times) or 'aucune'}"
                         )}
                     ]
                 ).choices[0].message.content.strip()
             except:
+                date_fmt = datetime.fromisoformat(date_q).strftime("%d/%m/%Y")
                 rep = (
-                    f"Horaires disponibles le {datetime.fromisoformat(date_q).strftime('%d/%m/%Y')}: "
-                    + (", ".join(horas) if horas else "aucun")
+                    f"Horaires disponibles le {date_fmt}: "
+                    + (", ".join(times) if times else "aucun")
                 )
 
             resp.message(rep)
             return str(resp), 200, {"Content-Type": "text/xml"}
 
-        # 3d) Sem data antecipada, lista próximos 9 slots
-        amanhã = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
-        slots = supabase.from_("view_horas_disponiveis") \
-            .select("date, horas") \
-            .eq("company_id", comp) \
-            .gte("date", amanhã) \
-            .order("date", desc=False) \
-            .limit(9) \
-            .execute().data
+        # 3c) Lista próximos 9 slots
+        tomorrow = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
+        rows = (
+            supabase
+            .from_("view_horas_disponiveis")
+            .select("date, horas_disponiveis")
+            .eq("company_id", comp)
+            .gte("date", tomorrow)
+            .order("date", desc=False)
+            .execute()
+            .data
+        )
+        slots = []
+        for r in rows:
+            d = r["date"]
+            for h in r.get("horas_disponiveis", {}).get("disponiveis", []):
+                slots.append((d, h))
+                if len(slots) >= 9:
+                    break
+            if len(slots) >= 9:
+                break
 
         if not slots:
             resp.message("Désolé, aucune date disponible pour le moment.")
         else:
-            opts = [
-                datetime.fromisoformat(f"{s['date']}T{s['horas']}") \
-                    .strftime("%d/%m/%Y %H:%M")
-                for s in slots
-            ]
-            menu = "\n".join(f"{i+1}) {opt}" for i, opt in enumerate(opts))
-            resp.message(
-                "Veuillez choisir une nouvelle date :\n\n" + menu
+            menu = "\n".join(
+                f"{i+1}) {format_slot(d, h)}"
+                for i, (d, h) in enumerate(slots)
             )
+            resp.message("Veuillez choisir une nouvelle date :\n\n" + menu)
 
         return str(resp), 200, {"Content-Type": "text/xml"}
 
@@ -165,7 +185,6 @@ def sms_reply():
         "Merci ! Répondez avec Y pour confirmer, N pour annuler ou R pour reprogrammer."
     )
     return str(resp), 200, {"Content-Type": "text/xml"}
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
