@@ -70,13 +70,14 @@ def parse_date_from_text(text):
             return HORA_FLAG
 
         idioma = detectar_idioma(text)
+        hoje = datetime.now().strftime("%d %B %Y")
 
         nlu = groq_client.chat.completions.create(
             model="llama3-8b-8192",
             messages=[
                 {"role": "system", "content": (
                     f"Tu es un assistant JSON. Ta tâche est d'extraire une date future à partir d'une phrase dans la langue '{idioma}' (ex: 'le 19 mai', 'demain', 'segunda-feira'). "
-                    "Aujourd'hui, c'est le 22 avril 2025. Si l'année ou la semaine n'est pas mentionnée, choisis toujours la prochaine occurrence future à partir de cette date. "
+                    f"Aujourd'hui, c'est le {hoje}. Si l'année ou la semaine n'est pas mentionnée, choisis toujours la prochaine occurrence future à partir de cette date. "
                     "Réponds uniquement en JSON comme { \"date\": \"2025-05-03\" }. Si aucune date n'est trouvée, retourne { \"date\": null }. Ne retourne aucun texte ou commentaire."
                 )},
                 {"role": "user", "content": text}
