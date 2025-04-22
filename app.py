@@ -20,7 +20,9 @@ groq_client  = Groq(api_key=GROQ_API_KEY)
 
 app = Flask(__name__)
 
-def truncate(text: str, limit: int = 800) -> str:
+TRUNCATE_LIMIT = 500
+
+def truncate(text: str, limit: int = TRUNCATE_LIMIT) -> str:
     if len(text) <= limit:
         return text
     return text[: limit-3] + "..."
@@ -28,7 +30,7 @@ def truncate(text: str, limit: int = 800) -> str:
 def send_message(resp: MessagingResponse, text: str):
     resp.message(truncate(text))
 
-def format_slot(date_str, time_str):
+def format_slot(date_str: str, time_str: str) -> str:
     dt = datetime.fromisoformat(f"{date_str}T{time_str}")
     return dt.strftime("%d/%m/%Y %H:%M")
 
@@ -155,7 +157,7 @@ def sms_reply():
             send_message(resp, rep)
             return str(resp), 200, {"Content-Type": "text/xml"}
 
-        # 3c) Lista próximos 9 slots
+        # 3c) Lista próximos 5 slots
         tomorrow = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
         rows = (
             supabase
@@ -172,9 +174,9 @@ def sms_reply():
             d = r["date"]
             for h in r.get("horas_disponiveis", {}).get("disponiveis", []):
                 slots.append((d, h))
-                if len(slots) >= 9:
+                if len(slots) >= 5:
                     break
-            if len(slots) >= 9:
+            if len(slots) >= 5:
                 break
 
         if not slots:
@@ -187,6 +189,7 @@ def sms_reply():
             send_message(resp, "Veuillez choisir une nouvelle date :\n\n" + menu)
 
         return str(resp), 200, {"Content-Type": "text/xml"}
+        print(send_message)
 
     # 4) Qualquer outra mensagem
     send_message(
@@ -194,6 +197,7 @@ def sms_reply():
         "Merci ! Répondez avec Y pour confirmer, N pour annuler ou R pour reprogrammer."
     )
     return str(resp), 200, {"Content-Type": "text/xml"}
+    print(send_message)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
