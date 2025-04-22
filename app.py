@@ -27,9 +27,9 @@ def format_slot(date_str, time_str):
 
 @app.route("/sms", methods=["POST"])
 def sms_reply():
-    msg   = request.form.get("Body", "").strip()
-    frm   = request.form.get("From")
-    resp  = MessagingResponse()
+    msg  = request.form.get("Body", "").strip().lower()
+    frm  = request.form.get("From")
+    resp = MessagingResponse()
 
     # 1) Busca último agendamento “Agendado”
     ag = supabase.table("agendamentos") \
@@ -37,123 +37,129 @@ def sms_reply():
         .eq("user_phone", frm) \
         .eq("status", "Agendado") \
         .order("date", desc=True) \
-        .limit(1) \
-        .execute().data
+        .limit(1).execute().data
 
     if not ag:
         resp.message("Aucun rendez-vous trouvé pour ce numéro.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
+        return str(resp), 200, {"Content‑Type":"text/xml"}
 
     a      = ag[0]
-    nome   = a.get("name_user") or "Client"
+    nome   = a.get("name_user", "Client")
     cod_id = a["cod_id"]
+    comp   = a["company_id"]
 
-    # 2) Chama a IA para extrair intent
-    intent = {}
-    try:
-        nlu = groq_client.chat.completions.create(
-            model="llama3-8b-8192",
-            messages=[
-                {"role": "system", "content": (
-                    "Você é um analisador de intenções. "
-                    "Retorne apenas JSON com: action (confirm|cancel|reschedule|check_availability), "
-                    "datetime (YYYY-MM-DD HH:MM) e/ou date (YYYY-MM-DD) quando aplicável."
-                )},
-                {"role": "user", "content": msg}
-            ]
-        )
-        content = nlu.choices[0].message.content.strip()
-        intent = json.loads(content)
-    except Exception as e:
-        print("⚠️ NLU fallback:", e)
-        # fallback manual
-        if msg.lower() == "y":
-            intent = {"action": "confirm"}
-        elif msg.lower() == "n":
-            intent = {"action": "cancel"}
-        elif msg.lower() == "r":
-            intent = {"action": "reschedule"}
-        elif re.match(r"\d{1,2}/\d{1,2}(/(\d{2}|\d{4}))?$", msg):
-            # cliente enviou algo como "30/04" ou "30/04/2025"
-            parts = msg.split("/")
-            day, month = parts[0], parts[1]
-            year = parts[2] if len(parts) == 3 else str(datetime.utcnow().year)
-            if len(year) == 2:
-                year = "20" + year
-            date_iso = f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
-            intent = {"action": "check_availability", "date": date_iso}
-        else:
-            intent = {"action": "unknown"}
-
-    # 3) Roteia pelos casos
-    act = intent.get("action")
-
-    if act == "confirm":
+    # 2) Fluxo estrito: só aceita Y, N ou R
+    if msg == "y":
         supabase.table("agendamentos") \
-            .update({"status": "Confirmado"}) \
-            .eq("cod_id", cod_id).execute()
+            .update({"status":"Confirmado"}) \
+            .eq("cod_id",cod_id).execute()
         resp.message(f"Merci {nome}! Votre rendez-vous est confirmé.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
+        return str(resp), 200, {"Content‑Type":"text/xml"}
 
-    if act == "cancel":
+    if msg == "n":
         supabase.table("agendamentos") \
-            .update({"status": "Annulé"}) \
-            .eq("cod_id", cod_id).execute()
+            .update({"status":"Annulé"}) \
+            .eq("cod_id",cod_id).execute()
         resp.message(f"D'accord {nome}, votre rendez-vous a été annulé.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
+        return str(resp), 200, {"Content‑Type":"text/xml"}
 
-    # Reschedule com datetime completo
-    if act == "reschedule" and intent.get("datetime"):
-        dt_str = intent["datetime"]  # "YYYY-MM-DD HH:MM"
-        date_new, time_new = dt_str.split(" ")
-        time_new += ":00"
-        supabase.table("agendamentos") \
-            .update({"date": date_new, "horas": time_new, "status": "Confirmado"}) \
-            .eq("cod_id", cod_id).execute()
-        rd = datetime.fromisoformat(f"{date_new}T{time_new}").strftime("%d/%m/%Y à %H:%M")
-        resp.message(f"Parfait {nome}! Votre rendez-vous a été reprogrammé pour le {rd}.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
+    if msg == "r":
+        # 3) Aqui sim chamamos a IA para interpretar ou listar opções
+        # Primeiro, tentamos extrair se o cliente já enviou data/hora
+        # Caso contrário, retornamos as próximas datas disponíveis
+        # (mesma lógica que vimos antes)
 
-    # Verifica disponibilidade em data específica
-    if act == "check_availability" and intent.get("date"):
-        date_q = intent["date"]
-        slots = supabase.from_("view_horas_disponiveis") \
-            .select("horas") \
-            .eq("company_id", a["company_id"]) \
-            .eq("date", date_q) \
-            .order("horas", asc=True) \
-            .execute().data
-        horas_list = [s["horas"][:5] for s in slots]
-
-        # Formatação final pela IA
+        # Exemplo: uso da NLU para extrair JSON com ação e parâmetros
         try:
-            reply = groq_client.chat.completions.create(
+            nlu = groq_client.chat.completions.create(
                 model="llama3-8b-8192",
                 messages=[
                     {"role":"system","content":(
-                        "Você é Luna, assistente virtual de clínica. "
-                        "Responda em francês, listando horários ou dizendo que não há." 
+                        "Você é analisador de intenções. Retorne apenas JSON com:\n"
+                        "- action: 'reschedule' ou 'check_availability'\n"
+                        "- datetime (YYYY-MM-DD HH:MM) se o usuário enviou data+hora\n"
+                        "- date (YYYY-MM-DD) se ele só enviou data\n"
                     )},
-                    {"role":"user","content":(
-                        f"Data: {date_q}. Disponibilidades: {', '.join(horas_list) or 'nenhuma'}"
-                    )}
+                    {"role":"user","content": msg}
                 ]
-            ).choices[0].message.content.strip()
+            )
+            intent = json.loads(nlu.choices[0].message.content)
         except:
-            # fallback simples
-            if horas_list:
-                reply = "Horaires disponibles le " + datetime.fromisoformat(date_q).strftime("%d/%m/%Y") + ": " + ", ".join(horas_list)
-            else:
-                reply = "Désolé, aucun horaire disponible le " + datetime.fromisoformat(date_q).strftime("%d/%m/%Y") + "."
-        resp.message(reply)
-        return str(resp), 200, {"Content-Type": "text/xml"}
+            intent = {"action": "list_slots"}
 
-    # Fallback genérico
+        # Se veio datetime completo, aplica alteração
+        if intent.get("action") == "reschedule" and intent.get("datetime"):
+            date_new, time_new = intent["datetime"].split(" ")
+            time_new += ":00"
+            supabase.table("agendamentos") \
+                .update({
+                    "date": date_new,
+                    "horas": time_new,
+                    "status": "Confirmado"
+                }).eq("cod_id", cod_id).execute()
+            rd = datetime.fromisoformat(f"{date_new}T{time_new}") \
+                   .strftime("%d/%m/%Y à %H:%M")
+            resp.message(f"Parfait {nome}! Reprogrammé pour le {rd}.")
+            return str(resp), 200, {"Content‑Type":"text/xml"}
+
+        # Se veio apenas date, checa disponibilidade naquela data
+        if intent.get("action") == "check_availability" and intent.get("date"):
+            date_q = intent["date"]
+            slots = supabase.from_("view_horas_disponiveis") \
+                .select("horas") \
+                .eq("company_id", comp) \
+                .eq("date", date_q) \
+                .order("horas", asc=True).execute().data
+            horas = [s["horas"][:5] for s in slots]
+            # IA formata a resposta
+            try:
+                rep = groq_client.chat.completions.create(
+                    model="llama3-8b-8192",
+                    messages=[
+                        {"role":"system","content":(
+                            "Você é Luna, responda em francês listando horários ou dizendo que não há."
+                        )},
+                        {"role":"user","content":(
+                            f"Data: {date_q}. Disponibilidades: {', '.join(horas) or 'nenhuma'}"
+                        )}
+                    ]
+                ).choices[0].message.content.strip()
+            except:
+                rep = (
+                    f"Horaires disponibles le {datetime.fromisoformat(date_q).strftime('%d/%m/%Y')}: "
+                    + (", ".join(horas) if horas else "aucun")
+                )
+            resp.message(rep)
+            return str(resp), 200, {"Content‑Type":"text/xml"}
+
+        # Caso não tenha data/hora no JSON, listamos as próximas 9 slots
+        amanhã = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
+        slots = supabase.from_("view_horas_disponiveis") \
+            .select("date, horas") \
+            .eq("company_id", comp) \
+            .gte("date", amanhã) \
+            .order("date", asc=True) \
+            .limit(9).execute().data
+
+        if not slots:
+            resp.message("Désolé, aucune date disponible pour le moment.")
+        else:
+            opts = [
+                datetime.fromisoformat(f"{s['date']}T{s['horas']}") \
+                    .strftime("%d/%m/%Y %H:%M")
+                for s in slots
+            ]
+            texto = "\n".join(f"{i+1}) {opt}" for i,opt in enumerate(opts))
+            resp.message(
+                "Veuillez choisir une nouvelle date en répondant par le numéro :\n\n" + texto
+            )
+        return str(resp), 200, {"Content‑Type":"text/xml"}
+
+    # 4) Qualquer outra mensagem cai aqui
     resp.message(
-        "Merci ! Répondez avec Y pour confirmer, N pour annuler, R pour reprogrammer, "
-        "ou indiquez une date (ex: 30/04) pour vérifier la disponibilité."
+        "Merci ! Répondez avec Y pour confirmer, N pour annuler ou R pour reprogrammer."
     )
-    return str(resp), 200, {"Content-Type": "text/xml"}
+    return str(resp), 200, {"Content‑Type":"text/xml"}
 
 
     # Se nenhum dos casos acima, manda instrução padrão
