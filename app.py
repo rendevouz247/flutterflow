@@ -147,11 +147,12 @@ def sms_reply():
             hora_formatada += ":00"
 
         horarios_disponiveis = get_available_times(nova_data, company_id=comp)
-        if hora_formatada not in horarios_disponiveis:
+        horarios_simplificados = [h[:5] for h in horarios_disponiveis]
+
+        if hora_formatada[:5] not in horarios_simplificados:
             send_message(resp, f"Désolé, l'heure {hora_formatada[:5]} n'est pas disponible pour le {format_date(nova_data)}.")
             return str(resp), 200, {"Content-Type": "text/xml"}
 
-        # Confirmação antes de salvar definitivamente
         supabase.table("agendamentos").update({"nova_hora": hora_formatada}).eq("cod_id", cod_id).execute()
         send_message(resp, f"Confirmez-vous le nouveau rendez-vous pour le {format_date(nova_data)} à {hora_formatada[:5]} ? Répondez OUI ou NON.")
         return str(resp), 200, {"Content-Type": "text/xml"}
@@ -204,7 +205,6 @@ def sms_reply():
     app.logger.info("⚠️ Caiu na message padrão final")
     send_message(resp, "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.")
     return str(resp), 200, {"Content-Type": "text/xml"}
-
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
