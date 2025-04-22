@@ -66,6 +66,17 @@ def traduzir(texto: str, destino: str) -> str:
 
 def parse_date_from_text(text):
     try:
+        # Normaliza strings como "às 10:00", "as 10:00", "de manhã", "à tarde", "no fim do dia"
+        text = text.strip().lower()
+        text = re.sub(r"(às|as|a|à|ao|no|na|de|em|por|ao\s+)?", "", text)
+
+        # Interpretação direta de partes do dia
+        if "manhã" in text:
+            return "09:00:00"
+        if "tarde" in text:
+            return "14:00:00"
+        if "noite" in text:
+            return "19:00:00"
         if re.match(r"^\d{1,2}[:h]\d{2}(:\d{2})?$", text.strip()):
             return HORA_FLAG
 
