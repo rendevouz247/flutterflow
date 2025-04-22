@@ -78,7 +78,7 @@ def parse_date_from_text(text):
             messages=[
                 {"role": "system", "content": (
                     f"Tu es un assistant JSON. Ta tâche est d'extraire une date future à partir d'une phrase dans la langue '{idioma}' (ex: 'le 19 mai', 'demain', 'segunda-feira'). "
-                    f"Aujourd'hui, c'est le {hoje}. Si l'année ou la semaine n'est pas mentionnée, choisis toujours la prochaine occurrence future à partir de cette date. "
+                    "Aujourd'hui, c'est le {hoje}. Si l'utilisateur mentionne 'prochaine mardi' ou équivalent, considère que cela signifie le mardi **de la semaine prochaine**, même si aujourd'hui est mardi."
                     "Réponds uniquement en JSON comme { \"date\": \"2025-05-03\" }. Si aucune date n'est trouvée, retourne { \"date\": null }. Ne retourne aucun texte ou commentaire."
                 )},
                 {"role": "user", "content": text}
