@@ -121,7 +121,7 @@ def sms_reply():
                 .select("horas") \
                 .eq("company_id", comp) \
                 .eq("date", date_q) \
-                .order("horas", asc=True).execute().data
+                .order("horas", ascending=True).execute().data
             horas = [s["horas"][:5] for s in slots]
             # IA formata a resposta
             try:
@@ -153,7 +153,7 @@ def sms_reply():
             .select("date, horas") \
             .eq("company_id", comp) \
             .gte("date", amanhã) \
-            .order("date", asc=True) \
+            .order("date", ascending=True) \
             .limit(9).execute().data
 
         if not slots:
