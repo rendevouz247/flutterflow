@@ -28,25 +28,26 @@ def truncate(text: str, limit: int = TRUNCATE_LIMIT) -> str:
 def send_message(resp: MessagingResponse, text: str):
     resp.message(truncate(text))
 
-def format_slot(date_str: str, time_str: str) -> str:
-    dt = datetime.fromisoformat(f"{date_str}T{time_str}")
-    return dt.strftime("%d/%m/%Y %H:%M")
+def format_date(date_str: str) -> str:
+    return datetime.fromisoformat(date_str).strftime("%d/%m/%Y")
 
-def parse_preferred_date(text):
-    try:
-        nlu = groq_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": (
-                    "Você é um analisador de data. Extraia do texto abaixo a data referida (como 'amanhã', 'próxima sexta', etc.) e retorne no formato JSON: { \"date\": \"YYYY-MM-DD\" }. Se não encontrar data, retorne {\"date\": null}."
-                )},
-                {"role": "user", "content": text}
-            ]
-        )
-        result = json.loads(nlu.choices[0].message.content)
-        return result.get("date")
-    except:
-        return None
+def parse_date_from_text(text: str):
+    """
+    Função simples para tentar encontrar uma data no texto usando expressões regulares
+    """
+    # Adicione expressões regulares que você quiser para suportar datas mais complexas
+    date_patterns = [
+        (r"(demain)", (datetime.now() + timedelta(days=1)).date()),
+        (r"(lundi)", (datetime.now() + timedelta(days=(7 - datetime.now().weekday()))).date()),
+        (r"(le (\d{1,2}) (\w+))", "Custom Regex (pode ser o dia do mês)")
+    ]
+   
+    for pattern, date in date_patterns:
+        match = re.search(pattern, text.lower())
+        if match:
+            return str(date)  # Aqui você pode melhorar para retornar uma data real
+
+    return None
 
 @app.route("/sms", methods=["POST"])
 def sms_reply():
@@ -89,8 +90,9 @@ def sms_reply():
         send_message(resp, "Avez-vous un jour de préférence pour reprogrammer ? Vous pouvez répondre par 'demain', 'lundi', 'le 3 mai', etc.")
         return str(resp), 200, {"Content-Type": "text/xml"}
 
-    # Se cliente respondeu com data (depois do "R")
-    preferred_date = parse_preferred_date(msg)
+    # IA entra aqui — quando cliente respondeu após o "R"
+    preferred_date = parse_date_from_text(msg)
+
     if preferred_date:
         def get_available_times(date):
             rows = (
@@ -112,30 +114,25 @@ def sms_reply():
         options = get_available_times(current)
 
         if options:
-            send_message(resp, f"Voici les horaires disponibles pour le {datetime.fromisoformat(current).strftime('%d/%m/%Y')}:\n" + ", ".join(options))
+            send_message(resp, f"Voici les horaires disponibles pour le {format_date(current)}:\n" + ", ".join(options))
         else:
             prev_day = (datetime.fromisoformat(current) - timedelta(days=1)).strftime("%Y-%m-%d")
             next_day = (datetime.fromisoformat(current) + timedelta(days=1)).strftime("%Y-%m-%d")
             prev_options = get_available_times(prev_day)
             next_options = get_available_times(next_day)
 
-            reply = f"Désolé, aucun horaire disponible le {datetime.fromisoformat(current).strftime('%d/%m/%Y')}"
+            reply = f"Désolé, aucun horaire disponible le {format_date(current)}"
             if prev_options:
-                reply += f". Mais il y en a le {datetime.fromisoformat(prev_day).strftime('%d/%m/%Y')}: {', '.join(prev_options)}"
+                reply += f". Mais il y en a le {format_date(prev_day)}: {', '.join(prev_options)}"
             if next_options:
-                reply += f". Et aussi le {datetime.fromisoformat(next_day).strftime('%d/%m/%Y')}: {', '.join(next_options)}"
+                reply += f". Et aussi le {format_date(next_day)}: {', '.join(next_options)}"
             send_message(resp, reply)
-            print(resp, reply)
 
         return str(resp), 200, {"Content-Type": "text/xml"}
 
-    # Caso não seja reconhecido nada
-    send_message(
-        resp,
-        "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer."
-    )
+    # Se não entendeu a resposta
+    send_message(resp, "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.")
     return str(resp), 200, {"Content-Type": "text/xml"}
-    print(resp, reply)
     
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
