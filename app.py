@@ -37,7 +37,7 @@ def format_date(date_str: str) -> str:
 def parse_date_from_text(text):
     try:
         nlu = groq_client.chat.completions.create(
-            model="mixtral-8x7b-32768",
+            model="llama3-8b-8192",
             messages=[
                 {"role": "system", "content": (
                     "Tu es un assistant JSON. Ta tâche est d'extraire une date future à partir d'une phrase en français (ex: 'le 19 mai', 'demain', 'lundi prochain'). "
@@ -53,7 +53,7 @@ def parse_date_from_text(text):
         result = json.loads(raw)
         return result.get("date")
     except Exception as e:
-        app.logger.info("❌ Erro ao extrair data:", e)
+        app.logger.info(f"❌ Erro ao extrair data: {e}")
         return None
 
 @app.route("/sms", methods=["POST"])
@@ -107,7 +107,7 @@ def sms_reply():
 
     if reagendando:
         preferred_date = parse_date_from_text(msg)
-        app.logger.info("📅 Data extraída:", preferred_date)
+        app.logger.info(f\"📅 Data extraída: {preferred_date}\")
 
         if preferred_date:
             try:
