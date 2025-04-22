@@ -34,11 +34,11 @@ def format_date(date_str: str) -> str:
 def parse_date_from_text(text):
     try:
         nlu = groq_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="mixtral-8x7b-32768",
             messages=[
                 {"role": "system", "content": (
-                    "Tu es un assistant qui extrait une date future mentionnée dans un texte (ex: 'le 19 mai', 'demain', 'lundi prochain'). "
-                    "Retourne seulement en JSON comme ceci: { \"date\": \"YYYY-MM-DD\" } ou { \"date\": null } si aucune date n'est trouvée."
+                    "Tu es un assistant qui extrait une date future mentionnée dans un texte en français (ex: 'le 19 mai', 'demain', 'lundi prochain'). "
+                    "Retourne uniquement un JSON: { \"date\": \"YYYY-MM-DD\" } ou { \"date\": null } si aucune date valide n'est trouvée."
                 )},
                 {"role": "user", "content": text}
             ]
@@ -142,4 +142,3 @@ def sms_reply():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-
