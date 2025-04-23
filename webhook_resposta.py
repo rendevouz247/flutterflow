@@ -1,23 +1,18 @@
 from supabase import create_client, Client as SupabaseClient
-from twilio.rest import Client as TwilioClient
 from datetime import datetime, timedelta
 import os
 
 # CONFIG
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-TWILIO_SID = os.getenv("TWILIO_SID")
-TWILIO_AUTH = os.getenv("TWILIO_AUTH")
-TWILIO_PHONE = os.getenv("TWILIO_PHONE")
 
 supabase: SupabaseClient = create_client(SUPABASE_URL, SUPABASE_KEY)
-twilio_client = TwilioClient(TWILIO_SID, TWILIO_AUTH)
 
 hoje = datetime.utcnow().date()
 fim = hoje + timedelta(days=3)
 
 agendamentos = supabase.table("agendamentos") \
-    .select("cod_id, name_user, user_phone, date, horas, nome_atendente, company_name") \
+    .select("cod_id, name_user, user_id, date, horas, nome_atendente, company_name") \
     .eq("sms_3dias", False) \
     .eq("status", "Agendado") \
     .gte("date", hoje.isoformat()) \
@@ -26,7 +21,7 @@ agendamentos = supabase.table("agendamentos") \
 
 for ag in agendamentos.data:
     nome = ag.get("name_user") or "Client"
-    telefone = ag["user_phone"]
+    user_id = ag["user_id"]
     cod_id = ag["cod_id"]
     data = datetime.strptime(ag["date"], "%Y-%m-%d").strftime("%d/%m/%Y")
     hora = ag["horas"][:5]
@@ -42,18 +37,22 @@ for ag in agendamentos.data:
     mensagem = mensagem[:800]
 
     try:
-        twilio_client.messages.create(
-            body=mensagem,
-            from_=TWILIO_PHONE,
-            to=telefone
-        )
-        print(f"✅ SMS envoyé à {nome} ({telefone})")
+        # 💬 Insere a mensagem diretamente no chat do FlutterFlow
+        supabase.table("mensagens_chat").insert({
+            "user_id": user_id,
+            "mensagem": mensagem,
+            "agendamento_id": cod_id,
+            "data_envio": datetime.utcnow().isoformat()
+        }).execute()
 
+        # ✅ Marca que o lembrete foi enviado
         supabase.table("agendamentos").update({
-            "sms_3dias": True,
-            "user_phone": telefone
+            "sms_3dias": True
         }).eq("cod_id", cod_id).execute()
 
+        print(f"✅ Mensagem enviada no chat do usuário {nome} ({user_id})")
+
     except Exception as e:
-        print(f"❌ Erreur lors de l'envoi à {telefone}: {e}")
+        print(f"❌ Erro ao enviar mensagem para o chat: {e}")
+
 
