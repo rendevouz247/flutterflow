@@ -1,23 +1,23 @@
 from flask import Flask, request
-from supabase import create_client, Client as SupabaseClient
+from supabase import create_client
 from twilio.rest import Client as TwilioClient
 from twilio.twiml.messaging_response import MessagingResponse
 from datetime import datetime, timedelta
 from groq import Groq
-import os, json, re
-import logging
+from deep_translator import GoogleTranslator
+import os, json, re, logging
 
 # CONFIG
-SUPABASE_URL  = os.getenv("SUPABASE_URL")
-SUPABASE_KEY  = os.getenv("SUPABASE_KEY")
-TWILIO_SID    = os.getenv("TWILIO_SID")
-TWILIO_AUTH   = os.getenv("TWILIO_AUTH")
-TWILIO_PHONE  = os.getenv("TWILIO_PHONE")
-GROQ_API_KEY  = os.getenv("GROQ_API_KEY")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+TWILIO_SID = os.getenv("TWILIO_SID")
+TWILIO_AUTH = os.getenv("TWILIO_AUTH")
+TWILIO_PHONE = os.getenv("TWILIO_PHONE")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-supabase     = create_client(SUPABASE_URL, SUPABASE_KEY)
-twilio_client= TwilioClient(TWILIO_SID, TWILIO_AUTH)
-groq_client  = Groq(api_key=GROQ_API_KEY)
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+twilio_client = TwilioClient(TWILIO_SID, TWILIO_AUTH)
+groq_client = Groq(api_key=GROQ_API_KEY)
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
@@ -25,8 +25,21 @@ app.logger.setLevel(logging.INFO)
 TRUNCATE_LIMIT = 500
 HORA_FLAG = "HORA_SELECIONADA"
 
+# Funções utilitárias
 def truncate(text: str, limit: int = TRUNCATE_LIMIT) -> str:
     return text if len(text) <= limit else text[: limit - 3] + "..."
+
+def detectar_idioma(texto):
+    try:
+        return GoogleTranslator(source='auto', target='en').detect(texto)
+    except:
+        return 'fr'
+
+def traduzir(texto: str, destino: str) -> str:
+    try:
+        return GoogleTranslator(source='fr', target=destino).translate(texto)
+    except:
+        return texto
 
 def send_message(resp: MessagingResponse, text: str, lang: str = "fr"):
     translated = traduzir(text, lang) if lang != "fr" else text
@@ -51,22 +64,9 @@ def get_available_times(date: str, company_id: str) -> list:
         times += j.get("disponiveis", [])
     return sorted(set(times))
 
-def detectar_idioma(texto):
-    try:
-        return GoogleTranslator(source='auto', target='en').detect(texto)
-    except:
-        return 'fr'
-
-def traduzir(texto: str, destino: str) -> str:
-    try:
-        return GoogleTranslator(source='fr', target=destino).translate(texto)
-    except:
-        return texto
-
 def parse_date_from_text(text):
     try:
-        # Checa se é uma hora isolada antes de chamar IA
-        hora_match = re.search(r"\b(\d{1,2}[:h]\d{2})(:\d{2})?\b", text)
+        hora_match = re.search(r"\\b(\\d{1,2}[:h]\\d{2})(:\\d{2})?\\b", text)
         if hora_match:
             return HORA_FLAG
 
@@ -83,12 +83,11 @@ def parse_date_from_text(text):
                     f"ajouter des années jusqu'à ce qu'elle soit dans le futur. Réponds uniquement avec ce JSON: "
                     f"{{ \"date\": \"YYYY-MM-DD\" }}. Ne réponds rien d'autre."
                 )},
-
                 {"role": "user", "content": text}
             ]
         )
         raw = nlu.choices[0].message.content.strip()
-        app.logger.info(f"\U0001F9E0 Resposta IA bruta: {raw}")
+        app.logger.info(f"🧠 Resposta IA bruta: {raw}")
         result = json.loads(raw)
         value = result.get("date")
         if value in [None, "YYYY-MM-DD"]:
@@ -97,7 +96,6 @@ def parse_date_from_text(text):
 
         now = datetime.now()
         dt = datetime.fromisoformat(value)
-
         if dt.year < now.year:
             dt = dt.replace(year=now.year)
         if dt < now:
@@ -108,160 +106,41 @@ def parse_date_from_text(text):
         app.logger.info(f"❌ Erro ao extrair data: {e}")
         return None
 
-@app.route("/sms", methods=["POST"])
-def sms_reply():
-    msg = request.form.get("Body", "").strip().lower()
+# Rota para integrar com FlutterFlow ou outra origem
+@app.route("/functions/v1/quick-handler", methods=["POST"])
+def quick_handler():
+    try:
+        data = request.get_json()
+        user_id = data.get("user_id")
+        mensagem = data.get("mensagem")
+        agendamento_id = data.get("agendamento_id")
 
-    confirmacoes = ["sim", "oui", "yes"]
-    negacoes = ["não", "non", "no"]
-    
-    
-    frm = request.form.get("From")
-    resp = MessagingResponse()
+        if not user_id or not mensagem:
+            return {"erro": "Faltam dados."}, 400
 
-    app.logger.info(f"📩 MSG RECEBIDA: {msg}")
+        idioma = detectar_idioma(mensagem)
 
-    ag = (
-        supabase
-        .table("agendamentos")
-        .select("*")
-        .eq("user_phone", frm)
-        .eq("status", "Agendado")
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-        .data
-    )
+        resposta = groq_client.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[
+                {"role": "system", "content": (
+                    f"Você é um assistente poliglota, atenda bem o cliente com respostas diretas e naturais."
+                )},
+                {"role": "user", "content": mensagem}
+            ]
+        ).choices[0].message.content.strip()
 
-    if not ag:
-        send_message(resp, "Aucun rendez-vous trouvé pour ce numéro.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
+        supabase.table("mensagens_chat").insert({
+            "user_id": user_id,
+            "mensagem": resposta,
+            "agendamento_id": agendamento_id
+        }).execute()
 
-    a = ag[0]
-    nome = a.get("name_user", "Client")
-    cod_id = a["cod_id"]
-    comp = a["company_id"]
-    reagendando = a.get("reagendando", False)
-    nova_data = a.get("nova_data")
+        return {"resposta": resposta}, 200
 
-    if msg in confirmacoes and reagendando:
-        ag = supabase.table("agendamentos").select("nova_data", "nova_hora").eq("cod_id", cod_id).limit(1).execute().data
-        if ag and ag[0].get("nova_data") and ag[0].get("nova_hora"):
-            nova_data = ag[0]["nova_data"]
-            nova_hora = ag[0]["nova_hora"]
-            supabase.table("agendamentos").update({
-                "date": nova_data,
-                "horas": nova_hora,
-                "status": "Confirmado",
-                "reagendando": False,
-                "nova_data": None,
-                "nova_hora": None
-            }).eq("cod_id", cod_id).execute()
-            send_message(resp, f"Perfeito {nome}! Sua consulta foi remarcada para {format_date(nova_data)} às {nova_hora}.")
-            return str(resp), 200, {"Content-Type": "text/xml"}
-        send_message(resp, "Faltam informações da nova data ou hora. Por favor, envie novamente.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
-
-    if msg in negacoes and reagendando:
-        supabase.table("agendamentos").update({"nova_data": None, "nova_hora": None}).eq("cod_id", cod_id).execute()
-        send_message(resp, "Ok, por favor envie uma nova data ou horário para reagendar.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
-        
-    if msg == "y":
-        supabase.table("agendamentos").update({"status": "Confirmado", "reagendando": False}).eq("cod_id", cod_id).execute()
-        send_message(resp, f"Merci {nome}! Votre rendez-vous est confirmé.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
-
-    if msg == "n":
-        supabase.table("agendamentos").update({"status": "Annulé", "reagendando": False}).eq("cod_id", cod_id).execute()
-        send_message(resp, f"D'accord {nome}, votre rendez-vous a été annulé.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
-
-    if msg == "r":
-        supabase.table("agendamentos").update({"reagendando": True}).eq("cod_id", cod_id).execute()
-        send_message(resp, "Avez-vous un jour de préférence pour reprogrammer ? Vous pouvez répondre par 'demain', 'lundi', 'le 3 mai', etc.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
-
-    if reagendando and msg and re.match(r"^\d{1,2}[:h]\d{2}(:\d{2})?$", msg):
-        if not nova_data:
-            send_message(resp, "Veuillez d'abord m'indiquer une date avant de choisir une heure 😉")
-            return str(resp), 200, {"Content-Type": "text/xml"}
-
-        hora_formatada = msg.replace("h", ":")
-        if len(hora_formatada.split(":")) == 2:
-            hora_formatada += ":00"
-
-        horarios_disponiveis = get_available_times(nova_data, company_id=comp)
-        horarios_simplificados = [h[:5] for h in horarios_disponiveis]
-
-        if hora_formatada[:5] not in horarios_simplificados:
-            send_message(resp, f"Désolé, l'heure {hora_formatada[:5]} n'est pas disponible pour le {format_date(nova_data)}.")
-            return str(resp), 200, {"Content-Type": "text/xml"}
-
-        supabase.table("agendamentos").update({"nova_hora": hora_formatada}).eq("cod_id", cod_id).execute()
-        send_message(resp, f"Confirmez-vous le nouveau rendez-vous pour le {format_date(nova_data)} à {hora_formatada[:5]} ? Répondez OUI ou NON.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
-
-    if msg == "oui" and reagendando:
-        dados = supabase.table("agendamentos").select("nova_data, nova_hora").eq("cod_id", cod_id).execute().data[0]
-        nova_data = dados.get("nova_data")
-        nova_hora = dados.get("nova_hora")
-        if nova_data and nova_hora:
-            supabase.table("agendamentos").update({
-                "date": nova_data,
-                "horas": nova_hora,
-                "status": "Confirmado",
-                "reagendando": False,
-                "nova_data": None,
-                "nova_hora": None
-            }).eq("cod_id", cod_id).execute()
-            send_message(resp, f"Parfait {nome}! Votre rendez-vous a été reprogrammé pour le {format_date(nova_data)} à {nova_hora[:5]}.")
-            return str(resp), 200, {"Content-Type": "text/xml"}
-
-    if msg == "non" and reagendando:
-        supabase.table("agendamentos").update({"nova_data": None, "nova_hora": None}).eq("cod_id", cod_id).execute()
-        send_message(resp, "D'accord, dites-moi une nouvelle date pour reprogrammer.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
-
-    preferred_date_raw = parse_date_from_text(msg)
-    app.logger.info(f"📅 Data extraída: {preferred_date_raw}")
-
-    if reagendando and preferred_date_raw and preferred_date_raw != HORA_FLAG:
-        try:
-            datetime.fromisoformat(preferred_date_raw)
-        except ValueError:
-            send_message(resp, "Désolé, je n'ai pas compris la date. Essayez à nouveau en indiquant un jour précis (ex: 'demain', 'lundi', 'le 3 mai').")
-            return str(resp), 200, {"Content-Type": "text/xml"}
-
-        horaires = get_available_times(preferred_date_raw, company_id=comp)
-        if horaires:
-            texto = f"Voici les horaires disponibles pour le {format_date(preferred_date_raw)}:\n" + ", ".join(horaires)
-        else:
-            # procura próximos 3 dias com disponibilidade
-            for i in range(1, 4):
-                proxima_data = (datetime.fromisoformat(preferred_date_raw) + timedelta(days=i)).date().isoformat()
-                prox_horarios = get_available_times(proxima_data, company_id=comp)
-                if prox_horarios:
-                    texto = (
-                        f"Aucun horaire disponible pour le {format_date(preferred_date_raw)}. "
-                        f"Mais voici les horaires pour le {format_date(proxima_data)}:\n" + ", ".join(prox_horarios)
-                    )
-                    break
-            else:
-                texto = f"Aucun horaire disponible pour le {format_date(preferred_date_raw)} ni les jours suivants."
-
-
-        supabase.table("agendamentos").update({"nova_data": preferred_date_raw, "nova_hora": None}).eq("cod_id", cod_id).execute()
-        send_message(resp, texto + "\n\nRépondez avec l'heure souhaitée (ex: 09:00) ou un autre jour.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
-
-    if not reagendando:
-        send_message(resp, "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.")
-        return str(resp), 200, {"Content-Type": "text/xml"}
-
-    app.logger.info("⚠️ Caiu na message padrão final")
-    send_message(resp, "Merci ! Répondez avec Y pour confirmer, N pour annuler, ou R pour reprogrammer.")
-    return str(resp), 200, {"Content-Type": "text/xml"}
+    except Exception as e:
+        app.logger.info(f"❌ Erro na função quick_handler: {e}")
+        return {"erro": str(e)}, 500
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
