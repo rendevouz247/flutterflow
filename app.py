@@ -133,7 +133,12 @@ def handle_ia():
                     .eq("company_id", company_id) \
                     .eq("atend_id", atendente_id) \
                     .eq("date", nova_data) \
-                    .single().execute()
+                    .limit(1).execute()
+                
+                if not resultado_raw.data:
+                    resposta = f"😕 Não encontrei horários disponíveis para o dia {nova_data}. Você gostaria de tentar outro dia?"
+                    return {"resposta": resposta}, 200
+                
 
                 resultado = resultado_raw.data or {}
                 disponiveis = resultado.get("horas_disponiveis", {}).get("disponiveis", [])
