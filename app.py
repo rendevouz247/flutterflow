@@ -18,29 +18,39 @@ groq_client = Groq(api_key=GROQ_API_KEY)
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
+from dateparser.search import search_dates
+
 def extrair_data_hora(texto):
     try:
+        app.logger.info(f"🔍 Tentando extrair de: {texto}")
         resultado = search_dates(
             texto,
             languages=["pt", "en", "fr"],
             settings={"PREFER_DATES_FROM": "future"}
         )
+
         if resultado:
             data_encontrada = resultado[0][1].date().isoformat()
+            app.logger.info(f"📆 Data identificada: {data_encontrada}")
         else:
+            app.logger.warning("⚠️ Nenhuma data encontrada.")
             return None, None
 
-        hora_match = re.search(r"(\d{1,2})\s?(?:h|hs|:)(\d{0,2})?", texto)
+        hora_match = re.search(r"(\\d{1,2})\\s?(?:h|hs|:)(\\d{0,2})?", texto)
         if hora_match:
             hora = hora_match.group(1).zfill(2)
             minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
             hora_formatada = f"{hora}:{minuto}:01"
+            app.logger.info(f"⏰ Hora identificada: {hora_formatada}")
             return data_encontrada, hora_formatada
 
+        app.logger.warning("⚠️ Nenhuma hora encontrada.")
         return data_encontrada, None
+
     except Exception as e:
         app.logger.error(f"❌ Erro em extrair_data_hora: {e}")
         return None, None
+
 
 @app.route("/ia", methods=["POST"])
 def handle_ia():
