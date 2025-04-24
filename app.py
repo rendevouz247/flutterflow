@@ -130,7 +130,7 @@ def handle_ia():
                         app.logger.info(f"🧪 Gravando nova_data = {nova_data_timestamp}, nova_hora = {match_hora}")
 
                         supabase.table("agendamentos").update({
-                            ""nova_data": nova_data_iso,
+                            "nova_data": nova_data_iso,
                             "nova_hora": match_hora
                         }).eq("cod_id", int(agendamento_id)).execute()
 
