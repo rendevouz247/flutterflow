@@ -52,7 +52,7 @@ def handle_ia():
         if mensagem in ["y", "yes", "sim", "oui"]:
             dados = supabase.table("agendamentos") \
                 .select("nova_data, nova_hora") \
-                .eq("cod_id", agendamento_id) \
+                .eq("cod_id", int(agendamento_id)) \
                 .single().execute().data
 
             app.logger.info(f"🔎 Dados do agendamento recuperados: {dados}")
@@ -67,9 +67,7 @@ def handle_ia():
                     "status": "Reagendado",
                     "reagendando": False,
                     "chat_ativo": False
-                }).eq("cod_id", agendamento_id).execute()
-
-                app.logger.info("💾 Confirmação salva com sucesso no Supabase.")
+                }).eq("cod_id", int(agendamento_id)).execute()
 
                 resposta = f"✅ Perfeito! Sua consulta foi remarcada para {nova_data} às {nova_hora}. Te esperamos lá! 😄"
             else:
@@ -79,7 +77,7 @@ def handle_ia():
             supabase.table("agendamentos").update({
                 "nova_data": None,
                 "nova_hora": None
-            }).eq("cod_id", agendamento_id).execute()
+            }).eq("cod_id", int(agendamento_id)).execute()
             resposta = "Tranquilo! Qual outro dia e horário funcionam melhor pra você? 😉"
 
         elif mensagem == "r":
@@ -87,7 +85,7 @@ def handle_ia():
                 "reagendando": True,
                 "nova_data": None,
                 "nova_hora": None
-            }).eq("cod_id", agendamento_id).execute()
+            }).eq("cod_id", int(agendamento_id)).execute()
             resposta = "Claro! Qual dia é melhor pra você? Pode dizer: 'amanhã', 'segunda às 14h', ou algo assim."
 
         elif contem_gatilhos(mensagem):
@@ -96,7 +94,7 @@ def handle_ia():
 
             dados_agendamento = supabase.table("agendamentos") \
                 .select("company_id, atend_id") \
-                .eq("cod_id", agendamento_id) \
+                .eq("cod_id", int(agendamento_id)) \
                 .single().execute().data
 
             company_id = dados_agendamento.get("company_id")
@@ -115,11 +113,15 @@ def handle_ia():
                 disponiveis = resultado.get("horas_disponiveis", {}).get("disponiveis", [])
 
                 if nova_hora in disponiveis:
-                    supabase.table("agendamentos").update({
-                        "nova_data": nova_data,
-                        "nova_hora": nova_hora
-                    }).eq("cod_id", agendamento_id).execute()
-                    app.logger.info("✅ nova_data e nova_hora gravados no Supabase")
+                    try:
+                        update_result = supabase.table("agendamentos").update({
+                            "nova_data": nova_data,
+                            "nova_hora": nova_hora
+                        }).eq("cod_id", int(agendamento_id)).execute()
+
+                        app.logger.info(f"💾 Resultado do UPDATE nova_data/nova_hora: {update_result}")
+                    except Exception as err:
+                        app.logger.error(f"❌ Erro ao gravar nova_data e nova_hora: {err}")
 
                     resposta = f"📆 Posso confirmar sua remarcação para {nova_data} às {nova_hora}? Responda com *sim* ou *não*."
                 else:
@@ -135,7 +137,7 @@ def handle_ia():
         else:
             historico = supabase.table("mensagens_chat") \
                 .select("mensagem, tipo") \
-                .eq("agendamento_id", agendamento_id) \
+                .eq("agendamento_id", int(agendamento_id)) \
                 .order("data_envio", desc=False) \
                 .limit(10).execute().data
 
