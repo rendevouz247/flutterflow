@@ -6,7 +6,6 @@ import os, logging, re
 import dateparser
 from dateparser.search import search_dates
 
-
 # CONFIG
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -20,15 +19,11 @@ app.logger.setLevel(logging.INFO)
 
 app.logger.info(f"📦 dateparser versão: {dateparser.__version__}")
 
-
 def extrair_data_hora(texto):
     try:
         app.logger.info(f"🔍 Tentando extrair de: {texto}")
 
-        # Remove "dia " do início
         texto = re.sub(r"\bdia\s+", "", texto, flags=re.IGNORECASE).strip()
-
-        # Substitui " às " ou " as " por " às " para unificar tratamento
         texto = re.sub(r"\s+as\s+", " às ", texto, flags=re.IGNORECASE)
         texto = re.sub(r"\s+à\s+", " às ", texto, flags=re.IGNORECASE)
 
@@ -45,8 +40,7 @@ def extrair_data_hora(texto):
             app.logger.warning("⚠️ Nenhuma data encontrada.")
             return None, None
 
-        # Normaliza horários (ex: 10h, 10 hs, 10:00, etc.)
-        hora_match = re.search(r"\b(\d{1,2})[:h](\d{2})\b", texto)
+        hora_match = re.search(r"(\d{1,2})\s?(?:h|hs|:)?(\d{0,2})", texto)
         if hora_match:
             hora = hora_match.group(1).zfill(2)
             minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
@@ -133,12 +127,7 @@ def handle_ia():
                     .eq("company_id", company_id) \
                     .eq("atend_id", atendente_id) \
                     .eq("date", nova_data) \
-                    .limit(1).execute()
-                
-                if not resultado_raw.data:
-                    resposta = f"😕 Não encontrei horários disponíveis para o dia {nova_data}. Você gostaria de tentar outro dia?"
-                    return {"resposta": resposta}, 200
-                
+                    .maybe_single().execute()
 
                 resultado = resultado_raw.data or {}
                 disponiveis = resultado.get("horas_disponiveis", {}).get("disponiveis", [])
@@ -146,32 +135,38 @@ def handle_ia():
                 app.logger.info(f"📊 Disponíveis na view: {disponiveis}")
                 app.logger.info(f"🕓 nova_hora extraída: {nova_hora}")
 
-                match_hora = next((h for h in disponiveis if nova_hora[:5] in h or h.startswith(nova_hora[:5])), None)
-
-                if match_hora:
-                    try:
-                        nova_data_timestamp = datetime.strptime(nova_data, "%Y-%m-%d")
-                        nova_data_iso = nova_data_timestamp.isoformat()
-                        app.logger.info(f"🧪 Gravando nova_data = {nova_data_iso}, nova_hora = {match_hora}")
-                
-                        supabase.table("agendamentos").update({
-                            "nova_data": nova_data_iso,
-                            "nova_hora": match_hora
-                        }).eq("cod_id", int(agendamento_id)).execute()
-                
-                        resposta = f"📆 Posso confirmar sua remarcação para o dia {nova_data} às {match_hora}? Responda com *sim* ou *não*."
-                
-                    except Exception as err:
-                        app.logger.error(f"❌ Erro ao gravar nova_data e nova_hora: {err}")
-                        resposta = "Tive um problema ao tentar salvar sua sugestão. Pode tentar novamente?"
-
-                else:
-                    sugestoes = disponiveis[:3]
-                    sugestoes_texto = "\n".join([f"🔹 {h}" for h in sugestoes]) or "Nenhum horário disponível."
+                if not disponiveis:
                     resposta = (
-                        f"😕 O horário {nova_hora} no dia {nova_data} não está disponível.\n"
-                        f"Aqui estão outras opções:\n{sugestoes_texto}"
+                        f"⚠️ Infelizmente não há horários disponíveis para o dia {nova_data}.
+"
+                        f"Por favor, envie outra data e horário para que eu possa verificar."
                     )
+                else:
+                    match_hora = next((h for h in disponiveis if nova_hora[:5] in h or h.startswith(nova_hora[:5])), None)
+
+                    if match_hora:
+                        try:
+                            nova_data_timestamp = datetime.strptime(nova_data, "%Y-%m-%d")
+                            nova_data_iso = nova_data_timestamp.isoformat()
+                            app.logger.info(f"🧲 Gravando nova_data = {nova_data_iso}, nova_hora = {match_hora}")
+
+                            supabase.table("agendamentos").update({
+                                "nova_data": nova_data_iso,
+                                "nova_hora": match_hora
+                            }).eq("cod_id", int(agendamento_id)).execute()
+
+                            resposta = f"🔐 Posso confirmar sua remarcação para o dia {nova_data} às {match_hora}? Responda com *sim* ou *não*."
+
+                        except Exception as err:
+                            app.logger.error(f"❌ Erro ao gravar nova_data e nova_hora: {err}")
+                            resposta = "Tive um problema ao tentar salvar sua sugestão. Pode tentar novamente?"
+                    else:
+                        sugestoes = disponiveis[:3]
+                        sugestoes_texto = "\n".join([f"🔹 {h}" for h in sugestoes]) or "Nenhum horário disponível."
+                        resposta = (
+                            f"😕 O horário {nova_hora} no dia {nova_data} não está disponível.\n"
+                            f"Aqui estão outras opções:\n{sugestoes_texto}"
+                        )
             else:
                 historico = supabase.table("mensagens_chat") \
                     .select("mensagem, tipo") \
