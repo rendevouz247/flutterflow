@@ -126,11 +126,11 @@ def handle_ia():
 
                 if match_hora:
                     try:
-                        nova_data_timestamp = datetime.strptime(nova_data, "%Y-%m-%d")
+                        nova_data_iso = datetime.strptime(nova_data, "%Y-%m-%d").isoformat()
                         app.logger.info(f"🧪 Gravando nova_data = {nova_data_timestamp}, nova_hora = {match_hora}")
 
                         supabase.table("agendamentos").update({
-                            "nova_data": nova_data_timestamp,
+                            ""nova_data": nova_data_iso,
                             "nova_hora": match_hora
                         }).eq("cod_id", int(agendamento_id)).execute()
 
