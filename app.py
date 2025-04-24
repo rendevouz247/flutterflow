@@ -122,22 +122,24 @@ def handle_ia():
                 app.logger.info(f"📊 Horários disponíveis: {disponiveis}")
 
 
-
+                app.logger.info(f"🕓 nova_hora extraída: {nova_hora}")
+                app.logger.info(f"📊 Horários disponíveis: {disponiveis}")
+                
                 if nova_hora in disponiveis:
                     try:
                         cod_id_int = int(agendamento_id)
                         nova_data_timestamp = datetime.strptime(nova_data, "%Y-%m-%d")
-                        
-                        app.logger.info(f"🧪 Tentando UPDATE com cod_id = {cod_id_int} (type: {type(cod_id_int)})")
-                    
+                        app.logger.info(f"🧪 Gravando no Supabase → nova_data: {nova_data_timestamp}, nova_hora: {nova_hora}, cod_id: {cod_id_int}")
+                
                         update_result = supabase.table("agendamentos").update({
                             "nova_data": nova_data_timestamp,
                             "nova_hora": nova_hora
                         }).eq("cod_id", cod_id_int).execute()
-
+                
                         app.logger.info(f"💾 Resultado do UPDATE nova_data/nova_hora: {update_result}")
                     except Exception as err:
                         app.logger.error(f"❌ Erro ao gravar nova_data e nova_hora: {err}")
+
 
                     resposta = f"📆 Posso confirmar sua remarcação para {nova_data} às {nova_hora}? Responda com *sim* ou *não*."
                 else:
