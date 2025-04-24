@@ -141,32 +141,21 @@ def handle_ia():
 
                 if match_hora:
                     try:
-                        dados_agendamento = supabase.table("agendamentos") \
-                            .select("nova_data") \
-                            .eq("cod_id", int(agendamento_id)) \
-                            .single().execute().data
-                        
-                        nova_data = dados_agendamento.get("nova_data")
-
-                        if not nova_data:
-                            resposta = "Tive um problema ao encontrar a data anterior. Pode me dizer novamente o dia e horário desejado?"
-                            app.logger.warning("⚠️ nova_data veio como None ao tentar gravar nova_hora.")
-                            return {"resposta": resposta}, 200
-                        
-                        nova_data_iso = nova_data if isinstance(nova_data, str) else nova_data.isoformat()
-
-
-                        app.logger.info(f"🧪 Gravando nova_data = {nova_data_timestamp}, nova_hora = {match_hora}")
-
+                        nova_data_timestamp = datetime.strptime(nova_data, "%Y-%m-%d")
+                        nova_data_iso = nova_data_timestamp.isoformat()
+                        app.logger.info(f"🧪 Gravando nova_data = {nova_data_iso}, nova_hora = {match_hora}")
+                
                         supabase.table("agendamentos").update({
                             "nova_data": nova_data_iso,
                             "nova_hora": match_hora
                         }).eq("cod_id", int(agendamento_id)).execute()
-
+                
                         resposta = f"📆 Posso confirmar sua remarcação para o dia {nova_data} às {match_hora}? Responda com *sim* ou *não*."
+                
                     except Exception as err:
                         app.logger.error(f"❌ Erro ao gravar nova_data e nova_hora: {err}")
                         resposta = "Tive um problema ao tentar salvar sua sugestão. Pode tentar novamente?"
+
                 else:
                     sugestoes = disponiveis[:3]
                     sugestoes_texto = "\n".join([f"🔹 {h}" for h in sugestoes]) or "Nenhum horário disponível."
