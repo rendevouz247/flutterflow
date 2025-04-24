@@ -78,11 +78,11 @@ def handle_ia():
         else:
             # DADOS DO AGENDAMENTO
             dados_agendamento = supabase.table("agendamentos") \
-                .select("company_id, atendente_id") \
+                .select("company_id, atend_id") \
                 .eq("cod_id", agendamento_id).single().execute().data
 
             company_id = dados_agendamento.get("company_id")
-            atendente_id = dados_agendamento.get("atendente_id")
+            atendente_id = dados_agendamento.get("atend_id")
 
             # 🚀 AGENDAMENTO AUTOMÁTICO
             if contem_gatilhos(mensagem):
@@ -94,7 +94,7 @@ def handle_ia():
                         resultado = supabase.table("view_horas_disponiveis") \
                             .select("disponiveis") \
                             .eq("company_id", company_id) \
-                            .eq("atendente_id", atendente_id) \
+                            .eq("atend_id", atendente_id) \
                             .eq("date", nova_data) \
                             .single().execute().data
             
