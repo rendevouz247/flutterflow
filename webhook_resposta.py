@@ -45,9 +45,10 @@ for ag in agendamentos.data:
             "data_envio": datetime.utcnow().isoformat()
         }).execute()
 
-        # ✅ Marca que o lembrete foi enviado
+        # ✅ Marca que o lembrete foi enviado e ativa o chat
         supabase.table("agendamentos").update({
-            "sms_3dias": True
+            "sms_3dias": True,
+            "chat_ativo": True
         }).eq("cod_id", cod_id).execute()
 
         print(f"✅ Mensagem enviada no chat do usuário {nome} ({user_id})")
