@@ -49,7 +49,7 @@ def handle_ia():
     resposta = ""
 
     try:
-        # COMANDO DE CONFIRMAÇÃO
+        # CONFIRMAÇÃO EXPLÍCITA
         if mensagem in ["y", "yes", "sim", "oui"]:
             dados = supabase.table("agendamentos") \
                 .select("nova_data, nova_hora") \
@@ -70,21 +70,30 @@ def handle_ia():
 
                 resposta = f"✅ Perfeito! Sua consulta foi remarcada com sucesso para {nova_data} às {nova_hora}. Te esperamos lá! 😄"
             else:
-                resposta = "Hmm... não encontrei uma data pendente para confirmar. Pode me dizer de novo o dia e horário?"
+                resposta = "Hmm... não encontrei uma sugestão de horário. Pode me dizer novamente qual dia e hora você quer?"
 
+        # NEGATIVA
         elif mensagem in ["n", "não", "no", "non"]:
-            resposta = "Sem problema! Qual dia e horário seria melhor pra você? 😊"
+            supabase.table("agendamentos").update({
+                "nova_data": None,
+                "nova_hora": None
+            }).eq("cod_id", agendamento_id).execute()
+            resposta = "Tranquilo! Qual outro dia e horário funcionam melhor pra você? 😉"
 
+        # AÇÃO RÁPIDA
         elif mensagem == "r":
             supabase.table("agendamentos").update({
                 "reagendando": True,
                 "nova_data": None,
                 "nova_hora": None
             }).eq("cod_id", agendamento_id).execute()
-
             resposta = "Claro! Qual dia é melhor pra você? Pode dizer: 'amanhã', 'segunda às 14h', ou algo assim."
 
-        else:
+        # 💡 LÓGICA DE EXTRAÇÃO DE DATA/HORA ANTES DA IA
+        elif contem_gatilhos(mensagem):
+            nova_data, nova_hora = extrair_data_hora(mensagem)
+            app.logger.info(f"📅 Extraído: {nova_data} às {nova_hora}")
+
             dados_agendamento = supabase.table("agendamentos") \
                 .select("company_id, atend_id") \
                 .eq("cod_id", agendamento_id) \
@@ -93,67 +102,63 @@ def handle_ia():
             company_id = dados_agendamento.get("company_id")
             atendente_id = dados_agendamento.get("atend_id")
 
-            if contem_gatilhos(mensagem):
-                nova_data, nova_hora = extrair_data_hora(mensagem)
-                app.logger.info(f"📅 Data extraída: {nova_data} | ⏰ Hora extraída: {nova_hora}")
+            if nova_data and nova_hora:
+                resultado = supabase.table("view_horas_disponiveis") \
+                    .select("disponiveis") \
+                    .eq("company_id", company_id) \
+                    .eq("atend_id", atendente_id) \
+                    .eq("date", nova_data) \
+                    .single().execute().data
 
-                if nova_data and nova_hora:
-                    resultado = supabase.table("view_horas_disponiveis") \
-                        .select("disponiveis") \
-                        .eq("company_id", company_id) \
-                        .eq("atend_id", atendente_id) \
-                        .eq("date", nova_data) \
-                        .single().execute().data
+                app.logger.info(f"📊 View retornou: {resultado}")
 
-                    app.logger.info(f"📊 Resultado da view: {resultado}")
+                if resultado and nova_hora in resultado.get("disponiveis", []):
+                    supabase.table("agendamentos").update({
+                        "nova_data": nova_data,
+                        "nova_hora": nova_hora
+                    }).eq("cod_id", agendamento_id).execute()
 
-                    if resultado and nova_hora in resultado.get("disponiveis", []):
-                        supabase.table("agendamentos").update({
-                            "nova_data": nova_data,
-                            "nova_hora": nova_hora
-                        }).eq("cod_id", agendamento_id).execute()
-
-                        resposta = f"📆 Posso confirmar sua remarcação para {nova_data} às {nova_hora}? Responda com *sim* ou *não* 😉"
-                    else:
-                        horarios = resultado.get("disponiveis", []) if resultado else []
-                        horarios_sugestao = "\n".join([f"🔹 {h}" for h in horarios[:3]]) or "Nenhum horário disponível."
-                        resposta = (
-                            f"😕 Esse horário não está disponível.\n"
-                            f"Aqui estão outras opções:\n{horarios_sugestao}\n"
-                            f"Qual prefere?"
-                        )
+                    resposta = f"📆 Posso confirmar sua remarcação para {nova_data} às {nova_hora}? Responda com *sim* ou *não*."
                 else:
-                    resposta = "Não consegui entender bem a data e hora. Pode dizer algo como: 'Quero remarcar pra amanhã às 15h'."
-            else:
-                historico = supabase.table("mensagens_chat") \
-                    .select("mensagem, tipo") \
-                    .eq("agendamento_id", agendamento_id) \
-                    .order("data_envio", desc=False) \
-                    .limit(10).execute().data
-
-                mensagens_formatadas = [
-                    {"role": "assistant" if m["tipo"] == "IA" else "user", "content": m["mensagem"]}
-                    for m in historico
-                ]
-                mensagens_formatadas.append({"role": "user", "content": mensagem})
-                mensagens_formatadas.insert(0, {
-                    "role": "system",
-                    "content": (
-                        "Você é uma atendente virtual simpática e multilíngue. "
-                        "Ajude clientes a remarcar serviços como consultas, estética, pet shop, mecânica, etc. "
-                        "Sempre pergunte se o cliente quer confirmar a data sugerida. "
-                        "Se ele disser sim, finalize com simpatia. Se disser não, pergunte por outra opção."
+                    sugestoes = resultado.get("disponiveis", []) if resultado else []
+                    sugestoes_texto = "\n".join([f"🔹 {h}" for h in sugestoes[:3]]) or "Nenhum horário disponível."
+                    resposta = (
+                        f"😕 O horário {nova_hora} no dia {nova_data} não está disponível.\n"
+                        f"Aqui estão outras opções:\n{sugestoes_texto}"
                     )
-                })
+            else:
+                resposta = "Não consegui entender claramente a data e hora. Tente algo como 'Quero remarcar para amanhã às 14h'."
 
-                nlu = groq_client.chat.completions.create(
-                    model="llama3-8b-8192",
-                    messages=mensagens_formatadas,
-                    temperature=0.7,
-                    max_tokens=400
+        # ✉️ SE NADA FOI EXTRAÍDO, ENTRA NA IA
+        else:
+            historico = supabase.table("mensagens_chat") \
+                .select("mensagem, tipo") \
+                .eq("agendamento_id", agendamento_id) \
+                .order("data_envio", desc=False) \
+                .limit(10).execute().data
+
+            mensagens_formatadas = [
+                {"role": "assistant" if m["tipo"] == "IA" else "user", "content": m["mensagem"]}
+                for m in historico
+            ]
+            mensagens_formatadas.append({"role": "user", "content": mensagem})
+            mensagens_formatadas.insert(0, {
+                "role": "system",
+                "content": (
+                    "Você é uma atendente virtual simpática. Nunca confirme horários sem o cliente dizer 'sim'. "
+                    "Se o cliente disser um dia e hora, pergunte: 'Posso confirmar a remarcação para tal dia às tal hora?'"
                 )
-                resposta = nlu.choices[0].message.content.strip()
+            })
 
+            nlu = groq_client.chat.completions.create(
+                model="llama3-8b-8192",
+                messages=mensagens_formatadas,
+                temperature=0.7,
+                max_tokens=400
+            )
+            resposta = nlu.choices[0].message.content.strip()
+
+        # GRAVA A RESPOSTA
         supabase.table("mensagens_chat").insert({
             "user_id": "ia",
             "mensagem": resposta,
@@ -172,4 +177,3 @@ def handle_ia():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-
