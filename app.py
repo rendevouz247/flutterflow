@@ -4,6 +4,8 @@ from datetime import datetime
 from groq import Groq
 import os, logging, re
 import dateparser
+from dateparser.search import search_dates
+
 
 # CONFIG
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -18,13 +20,13 @@ app.logger.setLevel(logging.INFO)
 
 def extrair_data_hora(texto):
     try:
-        data = dateparser.search.search_dates(
+        resultado = search_dates(
             texto,
             languages=["pt", "en", "fr"],
             settings={"PREFER_DATES_FROM": "future"}
         )
-        if data:
-            data_encontrada = data[0][1].date().isoformat()
+        if resultado:
+            data_encontrada = resultado[0][1].date().isoformat()
         else:
             return None, None
 
@@ -32,14 +34,13 @@ def extrair_data_hora(texto):
         if hora_match:
             hora = hora_match.group(1).zfill(2)
             minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
-            hora_formatada = f"{hora}:{minuto}:01"
+            hora_formatada = f\"{hora}:{minuto}:01\"
             return data_encontrada, hora_formatada
 
         return data_encontrada, None
     except Exception as e:
-        app.logger.error(f"❌ Erro em extrair_data_hora: {e}")
+        app.logger.error(f\"❌ Erro em extrair_data_hora: {e}\")
         return None, None
-
 
 @app.route("/ia", methods=["POST"])
 def handle_ia():
