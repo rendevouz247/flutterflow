@@ -25,33 +25,32 @@ def detectar_idioma(texto):
         return 'pt'
 
 @app.route("/ia", methods=["POST"])
-def ia_reply():
+def ia_from_supabase():
     try:
         data = request.get_json()
         user_id = data.get("user_id")
         mensagem = data.get("mensagem")
         agendamento_id = data.get("agendamento_id")
 
-        if not user_id or not mensagem:
-            return {"erro": "Faltam dados."}, 400
+        # 🔍 Apenas debug
+        app.logger.info(f"📩 Recebido na /ia: {data}")
 
-        idioma = detectar_idioma(mensagem)
+        # Geração de resposta (pode ser mais elaborada depois)
+        resposta = f"Recebi sua mensagem: {mensagem}"
 
-        resposta = groq_client.chat.completions.create(
-            model="llama3-8b-8192",
-            messages=[
-                {"role": "system", "content": (
-                    f"Você é um assistente poliglota, atenda bem o cliente com respostas diretas, educadas e naturais, na língua que ele usar."
-                )},
-                {"role": "user", "content": mensagem}
-            ]
-        ).choices[0].message.content.strip()
+        # Grava no Supabase se quiser
+        supabase.table("mensagens_chat").insert({
+            "user_id": "ia",
+            "mensagem": resposta,
+            "agendamento_id": agendamento_id
+        }).execute()
 
         return {"resposta": resposta}, 200
 
     except Exception as e:
-        app.logger.info(f"❌ Erro na função ia_reply: {e}")
-        return {"erro": str(e)}, 500
+        app.logger.error(f"❌ Erro em /ia: {e}")
+        return {"erro": "Falha ao processar"}, 500
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
