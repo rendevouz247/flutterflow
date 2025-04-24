@@ -40,7 +40,7 @@ def handle_ia():
     mensagem = data.get("mensagem", "").strip().lower()
     agendamento_id = data.get("agendamento_id")
 
-    print(f"📩 Requisição recebida: {data}")
+    app.logger.info(f"📩 Requisição recebida: {data}")
 
     if not user_id or not mensagem or not agendamento_id:
         return {"erro": "Dados incompletos"}, 400
@@ -86,7 +86,7 @@ def handle_ia():
             # 🚀 AGENDAMENTO AUTOMÁTICO
             if contem_gatilhos(mensagem):
                 nova_data, nova_hora = extrair_data_hora(mensagem)
-                print(f"📅 Data extraída: {nova_data} | ⏰ Hora extraída: {nova_hora}")
+                app.logger.info(f"📅 Data extraída: {nova_data} | ⏰ Hora extraída: {nova_hora}")
             
                 if nova_data and nova_hora:
                     try:
@@ -97,7 +97,7 @@ def handle_ia():
                             .eq("date", nova_data) \
                             .single().execute().data
             
-                        print(f"📊 Resultado da view_horas_disponiveis: {resultado}")
+                        app.logger.info(f"📊 Resultado da view_horas_disponiveis: {resultado}")
             
                         if resultado and nova_hora in resultado.get("disponiveis", []):
                             supabase.table("agendamentos").update({
@@ -117,10 +117,10 @@ def handle_ia():
                             )
             
                     except Exception as e:
-                        print(f"❌ ERRO AO CONSULTAR HORÁRIOS: {e}")
+                        app.logger.info(f"❌ ERRO AO CONSULTAR HORÁRIOS: {e}")
                         resposta = "Houve um erro ao verificar os horários disponíveis. Tente novamente ou escolha outro dia."
                 else:
-                    print("⚠️ Não consegui extrair data/hora da mensagem.")
+                    app.logger.info("⚠️ Não consegui extrair data/hora da mensagem.")
                     resposta = "Não consegui entender claramente a data e hora. Pode tentar algo como 'Quero remarcar para amanhã às 15h'."
 
 
@@ -163,11 +163,11 @@ def handle_ia():
             "tipo": "IA"
         }).execute()
 
-        print(f"💬 Resposta da IA: {resposta}")
+        app.logger.info(f"💬 Resposta da IA: {resposta}")
         return {"resposta": resposta}, 200
 
     except Exception as e:
-        print(f"❌ Erro: {e}")
+        app.logger.info(f"❌ Erro: {e}")
         return {"erro": "Erro interno ao processar"}, 500
 
 if __name__ == "__main__":
