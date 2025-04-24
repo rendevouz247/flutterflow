@@ -5,6 +5,11 @@ from groq import Groq
 import os, logging
 import dateparser
 import re
+from datetime import datetime
+
+# Convertendo nova_data de string para timestamp
+nova_data_timestamp = datetime.strptime(nova_data, "%Y-%m-%d")
+
 
 # CONFIG
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -118,7 +123,7 @@ def handle_ia():
                         app.logger.info(f"🧪 Tentando UPDATE com cod_id = {cod_id_int} (type: {type(cod_id_int)})")
                     
                         update_result = supabase.table("agendamentos").update({
-                            "nova_data": nova_data,
+                            "nova_data": datetime.strptime(nova_data, "%Y-%m-%d"),
                             "nova_hora": nova_hora
                         }).eq("cod_id", cod_id_int).execute())
 
