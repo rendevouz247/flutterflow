@@ -113,6 +113,9 @@ def handle_ia():
                 app.logger.info(f"📊 Resultado da view: {resultado}")
 
                 disponiveis = resultado.get("horas_disponiveis", {}).get("disponiveis", [])
+                app.logger.info(f"🧪 Comparando com horarios da view: {disponiveis}")
+                app.logger.info(f"🧪 nova_hora extraída: {nova_hora}")
+
 
                 if nova_hora in disponiveis:
                     try:
