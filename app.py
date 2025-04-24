@@ -7,10 +7,6 @@ import dateparser
 import re
 from datetime import datetime
 
-# Convertendo nova_data de string para timestamp
-nova_data_timestamp = datetime.strptime(nova_data, "%Y-%m-%d")
-
-
 # CONFIG
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
