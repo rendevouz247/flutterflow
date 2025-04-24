@@ -4,7 +4,6 @@ from datetime import datetime
 from groq import Groq
 import os, logging, re
 import dateparser
-app.logger.info(f"📦 dateparser versão: {dateparser.__version__}")
 from dateparser.search import search_dates
 
 
@@ -18,6 +17,8 @@ groq_client = Groq(api_key=GROQ_API_KEY)
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
+
+app.logger.info(f"📦 dateparser versão: {dateparser.__version__}")
 
 from dateparser.search import search_dates
 
