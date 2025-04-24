@@ -55,8 +55,10 @@ def handle_ia():
                 .eq("cod_id", agendamento_id) \
                 .single().execute().data
 
+            app.logger.info(f"🔎 Dados do agendamento recuperados: {dados}")
             nova_data = dados.get("nova_data")
             nova_hora = dados.get("nova_hora")
+            app.logger.info(f"✔️ nova_data: {nova_data} | nova_hora: {nova_hora}")
 
             if nova_data and nova_hora:
                 supabase.table("agendamentos").update({
@@ -66,6 +68,8 @@ def handle_ia():
                     "reagendando": False,
                     "chat_ativo": False
                 }).eq("cod_id", agendamento_id).execute()
+
+                app.logger.info("💾 Confirmação salva com sucesso no Supabase.")
 
                 resposta = f"✅ Perfeito! Sua consulta foi remarcada para {nova_data} às {nova_hora}. Te esperamos lá! 😄"
             else:
