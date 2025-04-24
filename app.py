@@ -20,13 +20,14 @@ app.logger.setLevel(logging.INFO)
 
 app.logger.info(f"📦 dateparser versão: {dateparser.__version__}")
 
-from dateparser.search import search_dates
-
-from dateparser.search import search_dates
 
 def extrair_data_hora(texto):
     try:
         app.logger.info(f"🔍 Tentando extrair de: {texto}")
+        
+        # 👇 Corrige expressões tipo "dia 23/05" → "23/05"
+        texto = re.sub(r"\bdia\s+", "", texto, flags=re.IGNORECASE).strip()
+
         resultado = search_dates(
             texto,
             languages=["pt", "en", "fr"],
@@ -40,7 +41,6 @@ def extrair_data_hora(texto):
             app.logger.warning("⚠️ Nenhuma data encontrada.")
             return None, None
 
-        # 👇 REGEX CORRIGIDA
         hora_match = re.search(r"(\d{1,2})\s?(?:h|hs|:)(\d{0,2})?", texto)
         if hora_match:
             hora = hora_match.group(1).zfill(2)
@@ -55,7 +55,6 @@ def extrair_data_hora(texto):
     except Exception as e:
         app.logger.error(f"❌ Erro em extrair_data_hora: {e}")
         return None, None
-
 
 @app.route("/ia", methods=["POST"])
 def handle_ia():
