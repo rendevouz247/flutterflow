@@ -30,16 +30,16 @@ def extrair_data_hora(texto):
         else:
             return None, None
 
-        hora_match = re.search(r"(\\d{1,2})\\s?(?:h|hs|:)(\\d{0,2})?", texto)
+        hora_match = re.search(r"(\d{1,2})\s?(?:h|hs|:)(\d{0,2})?", texto)
         if hora_match:
             hora = hora_match.group(1).zfill(2)
             minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
-            hora_formatada = f\"{hora}:{minuto}:01\"
+            hora_formatada = f"{hora}:{minuto}:01"
             return data_encontrada, hora_formatada
 
         return data_encontrada, None
     except Exception as e:
-        app.logger.error(f\"❌ Erro em extrair_data_hora: {e}\")
+        app.logger.error(f"❌ Erro em extrair_data_hora: {e}")
         return None, None
 
 @app.route("/ia", methods=["POST"])
