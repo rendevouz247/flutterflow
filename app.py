@@ -86,31 +86,43 @@ def handle_ia():
             # 🚀 AGENDAMENTO AUTOMÁTICO
             if contem_gatilhos(mensagem):
                 nova_data, nova_hora = extrair_data_hora(mensagem)
+                print(f"📅 Data extraída: {nova_data} | ⏰ Hora extraída: {nova_hora}")
+            
                 if nova_data and nova_hora:
-                    resultado = supabase.table("view_horas_disponiveis") \
-                        .select("disponiveis") \
-                        .eq("company_id", company_id) \
-                        .eq("atendente_id", atendente_id) \
-                        .eq("date", nova_data) \
-                        .single().execute().data
-                    
-                    if resultado and nova_hora in resultado.get("disponiveis", []):
-                        supabase.table("agendamentos").update({
-                            "nova_data": nova_data,
-                            "nova_hora": nova_hora,
-                            "status": "Reagendado",
-                            "reagendando": False
-                        }).eq("cod_id", agendamento_id).execute()
-                        resposta = f"✅ Prontinho! Seu horário foi remarcado com sucesso para {nova_data} às {nova_hora}."
-                    else:
-                        horarios = resultado.get("disponiveis", []) if resultado else []
-                        horarios_sugestao = "\n".join([f"🔹 {h}" for h in horarios[:3]]) or "Nenhum horário disponível."
-                        resposta = (
-                            f"Infelizmente o horário {nova_hora} em {nova_data} não está disponível 😕\n"
-                            f"Mas aqui estão outras opções:\n{horarios_sugestao}"
-                        )
+                    try:
+                        resultado = supabase.table("view_horas_disponiveis") \
+                            .select("disponiveis") \
+                            .eq("company_id", company_id) \
+                            .eq("atendente_id", atendente_id) \
+                            .eq("date", nova_data) \
+                            .single().execute().data
+            
+                        print(f"📊 Resultado da view_horas_disponiveis: {resultado}")
+            
+                        if resultado and nova_hora in resultado.get("disponiveis", []):
+                            supabase.table("agendamentos").update({
+                                "nova_data": nova_data,
+                                "nova_hora": nova_hora,
+                                "status": "Reagendado",
+                                "reagendando": False
+                            }).eq("cod_id", agendamento_id).execute()
+            
+                            resposta = f"✅ Prontinho! Seu horário foi remarcado com sucesso para {nova_data} às {nova_hora}."
+                        else:
+                            horarios = resultado.get("disponiveis", []) if resultado else []
+                            horarios_sugestao = "\n".join([f"🔹 {h}" for h in horarios[:3]]) or "Nenhum horário disponível."
+                            resposta = (
+                                f"😕 O horário {nova_hora} em {nova_data} não está disponível.\n"
+                                f"Veja outras opções:\n{horarios_sugestao}"
+                            )
+            
+                    except Exception as e:
+                        print(f"❌ ERRO AO CONSULTAR HORÁRIOS: {e}")
+                        resposta = "Houve um erro ao verificar os horários disponíveis. Tente novamente ou escolha outro dia."
                 else:
+                    print("⚠️ Não consegui extrair data/hora da mensagem.")
                     resposta = "Não consegui entender claramente a data e hora. Pode tentar algo como 'Quero remarcar para amanhã às 15h'."
+
 
             else:
                 # MODO CONVERSAÇÃO VIA IA
