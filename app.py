@@ -30,10 +30,11 @@ def extrair_data_hora(texto):
     hora_match = re.search(r"(\d{1,2})\s?(?:h|hs|:)(\d{0,2})?", texto)
     if data and hora_match:
         hora = hora_match.group(1).zfill(2)
-        minuto = minuto if minuto else "00"
+        minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
         hora_formatada = f"{hora}:{minuto}:01"
         return data.date().isoformat(), hora_formatada
     return None, None
+
 
 @app.route("/ia", methods=["POST"])
 def handle_ia():
