@@ -93,15 +93,15 @@ def handle_ia():
         elif contem_gatilhos(mensagem):
             nova_data, nova_hora = extrair_data_hora(mensagem)
             app.logger.info(f"📅 Extraído: {nova_data} às {nova_hora}")
-
+        
             dados_agendamento = supabase.table("agendamentos") \
                 .select("company_id, atend_id") \
                 .eq("cod_id", int(agendamento_id)) \
                 .single().execute().data
-
+        
             company_id = dados_agendamento.get("company_id")
             atendente_id = dados_agendamento.get("atend_id")
-
+        
             if nova_data and nova_hora:
                 resultado_raw = supabase.table("view_horas_disponiveis") \
                     .select("horas_disponiveis") \
@@ -109,39 +109,33 @@ def handle_ia():
                     .eq("atend_id", atendente_id) \
                     .eq("date", nova_data) \
                     .single().execute()
-                
-                app.logger.info(f"🧪 Resultado bruto da view: {resultado_raw}")
-                
+        
                 resultado = resultado_raw.data or {}
-
-
-                app.logger.info(f"📊 Resultado da view: {resultado}")
-
                 disponiveis = resultado.get("horas_disponiveis", {}).get("disponiveis", [])
+        
+                app.logger.info(f"📊 Disponíveis na view: {disponiveis}")
                 app.logger.info(f"🕓 nova_hora extraída: {nova_hora}")
-                app.logger.info(f"📊 Horários disponíveis: {disponiveis}")
-
-
-                app.logger.info(f"🕓 nova_hora extraída: {nova_hora}")
-                app.logger.info(f"📊 Horários disponíveis: {disponiveis}")
-                
-                if nova_hora in disponiveis:
+        
+                # Match aproximado por início
+                match_hora = next((h for h in disponiveis if h.startswith(nova_hora)), None)
+        
+                if match_hora:
                     try:
                         cod_id_int = int(agendamento_id)
                         nova_data_timestamp = datetime.strptime(nova_data, "%Y-%m-%d")
-                        app.logger.info(f"🧪 Gravando no Supabase → nova_data: {nova_data_timestamp}, nova_hora: {nova_hora}, cod_id: {cod_id_int}")
-                
-                        update_result = supabase.table("agendamentos").update({
+        
+                        app.logger.info(f"🧪 Gravando temporário: nova_data = {nova_data_timestamp}, nova_hora = {nova_hora}")
+        
+                        supabase.table("agendamentos").update({
                             "nova_data": nova_data_timestamp,
                             "nova_hora": nova_hora
                         }).eq("cod_id", cod_id_int).execute()
-                
-                        app.logger.info(f"💾 Resultado do UPDATE nova_data/nova_hora: {update_result}")
+        
+                        resposta = f"📆 Posso confirmar sua remarcação para o dia {nova_data} às {nova_hora}? Responda com *sim* ou *não*."
+        
                     except Exception as err:
-                        app.logger.error(f"❌ Erro ao gravar nova_data e nova_hora: {err}")
-
-
-                    resposta = f"📆 Posso confirmar sua remarcação para {nova_data} às {nova_hora}? Responda com *sim* ou *não*."
+                        app.logger.error(f"❌ Erro ao gravar nova_data/nova_hora: {err}")
+                        resposta = "Tive um problema ao tentar salvar sua sugestão. Pode tentar novamente?"
                 else:
                     sugestoes = disponiveis[:3]
                     sugestoes_texto = "\n".join([f"🔹 {h}" for h in sugestoes]) or "Nenhum horário disponível."
@@ -151,6 +145,7 @@ def handle_ia():
                     )
             else:
                 resposta = "Não consegui entender claramente a data e hora. Tente algo como 'Quero remarcar para amanhã às 14h'."
+
 
         else:
             historico = supabase.table("mensagens_chat") \
