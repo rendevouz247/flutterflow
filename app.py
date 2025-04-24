@@ -24,9 +24,13 @@ app.logger.info(f"📦 dateparser versão: {dateparser.__version__}")
 def extrair_data_hora(texto):
     try:
         app.logger.info(f"🔍 Tentando extrair de: {texto}")
-        
-        # 👇 Corrige expressões tipo "dia 23/05" → "23/05"
+
+        # Remove "dia " do início
         texto = re.sub(r"\bdia\s+", "", texto, flags=re.IGNORECASE).strip()
+
+        # Substitui " às " ou " as " por " às " para unificar tratamento
+        texto = re.sub(r"\s+as\s+", " às ", texto, flags=re.IGNORECASE)
+        texto = re.sub(r"\s+à\s+", " às ", texto, flags=re.IGNORECASE)
 
         resultado = search_dates(
             texto,
@@ -41,7 +45,8 @@ def extrair_data_hora(texto):
             app.logger.warning("⚠️ Nenhuma data encontrada.")
             return None, None
 
-        hora_match = re.search(r"(\d{1,2})\s?(?:h|hs|:)(\d{0,2})?", texto)
+        # Normaliza horários (ex: 10h, 10 hs, 10:00, etc.)
+        hora_match = re.search(r"(\d{1,2})\s?(?:h|hs|:)?(\d{0,2})", texto)
         if hora_match:
             hora = hora_match.group(1).zfill(2)
             minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
