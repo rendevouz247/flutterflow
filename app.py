@@ -103,18 +103,24 @@ def handle_ia():
             atendente_id = dados_agendamento.get("atend_id")
 
             if nova_data and nova_hora:
-                resultado = supabase.table("view_horas_disponiveis") \
+                resultado_raw = supabase.table("view_horas_disponiveis") \
                     .select("horas_disponiveis") \
                     .eq("company_id", company_id) \
                     .eq("atend_id", atendente_id) \
                     .eq("date", nova_data) \
-                    .single().execute().data
+                    .single().execute()
+                
+                app.logger.info(f"🧪 Resultado bruto da view: {resultado_raw}")
+                
+                resultado = resultado_raw.data or {}
+
 
                 app.logger.info(f"📊 Resultado da view: {resultado}")
 
                 disponiveis = resultado.get("horas_disponiveis", {}).get("disponiveis", [])
-                app.logger.info(f"🧪 Comparando com horarios da view: {disponiveis}")
-                app.logger.info(f"🧪 nova_hora extraída: {nova_hora}")
+                app.logger.info(f"🕓 nova_hora extraída: {nova_hora}")
+                app.logger.info(f"📊 Horários disponíveis: {disponiveis}")
+
 
 
                 if nova_hora in disponiveis:
