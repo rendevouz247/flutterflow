@@ -30,7 +30,7 @@ def extrair_data_hora(texto):
     if data and hora_match:
         hora = hora_match.group(1).zfill(2)
         minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
-        hora_formatada = f"{hora}:{minuto}"
+        hora_formatada = f"{hora}:{minuto}:01"
         return data.date().isoformat(), hora_formatada
     return None, None
 
@@ -49,7 +49,6 @@ def handle_ia():
     resposta = ""
 
     try:
-        # CONFIRMAÇÃO EXPLÍCITA
         if mensagem in ["y", "yes", "sim", "oui"]:
             dados = supabase.table("agendamentos") \
                 .select("nova_data, nova_hora") \
@@ -68,11 +67,10 @@ def handle_ia():
                     "chat_ativo": False
                 }).eq("cod_id", agendamento_id).execute()
 
-                resposta = f"✅ Perfeito! Sua consulta foi remarcada com sucesso para {nova_data} às {nova_hora}. Te esperamos lá! 😄"
+                resposta = f"✅ Perfeito! Sua consulta foi remarcada para {nova_data} às {nova_hora}. Te esperamos lá! 😄"
             else:
                 resposta = "Hmm... não encontrei uma sugestão de horário. Pode me dizer novamente qual dia e hora você quer?"
 
-        # NEGATIVA
         elif mensagem in ["n", "não", "no", "non"]:
             supabase.table("agendamentos").update({
                 "nova_data": None,
@@ -80,7 +78,6 @@ def handle_ia():
             }).eq("cod_id", agendamento_id).execute()
             resposta = "Tranquilo! Qual outro dia e horário funcionam melhor pra você? 😉"
 
-        # AÇÃO RÁPIDA
         elif mensagem == "r":
             supabase.table("agendamentos").update({
                 "reagendando": True,
@@ -89,7 +86,6 @@ def handle_ia():
             }).eq("cod_id", agendamento_id).execute()
             resposta = "Claro! Qual dia é melhor pra você? Pode dizer: 'amanhã', 'segunda às 14h', ou algo assim."
 
-        # 💡 LÓGICA DE EXTRAÇÃO DE DATA/HORA ANTES DA IA
         elif contem_gatilhos(mensagem):
             nova_data, nova_hora = extrair_data_hora(mensagem)
             app.logger.info(f"📅 Extraído: {nova_data} às {nova_hora}")
@@ -104,24 +100,27 @@ def handle_ia():
 
             if nova_data and nova_hora:
                 resultado = supabase.table("view_horas_disponiveis") \
-                    .select("disponiveis") \
+                    .select("horas_disponiveis") \
                     .eq("company_id", company_id) \
                     .eq("atend_id", atendente_id) \
                     .eq("date", nova_data) \
                     .single().execute().data
 
-                app.logger.info(f"📊 View retornou: {resultado}")
+                app.logger.info(f"📊 Resultado da view: {resultado}")
 
-                if resultado and nova_hora in resultado.get("disponiveis", []):
+                disponiveis = resultado.get("horas_disponiveis", {}).get("disponiveis", [])
+
+                if nova_hora in disponiveis:
                     supabase.table("agendamentos").update({
                         "nova_data": nova_data,
                         "nova_hora": nova_hora
                     }).eq("cod_id", agendamento_id).execute()
+                    app.logger.info("✅ nova_data e nova_hora gravados no Supabase")
 
                     resposta = f"📆 Posso confirmar sua remarcação para {nova_data} às {nova_hora}? Responda com *sim* ou *não*."
                 else:
-                    sugestoes = resultado.get("disponiveis", []) if resultado else []
-                    sugestoes_texto = "\n".join([f"🔹 {h}" for h in sugestoes[:3]]) or "Nenhum horário disponível."
+                    sugestoes = disponiveis[:3]
+                    sugestoes_texto = "\n".join([f"🔹 {h}" for h in sugestoes]) or "Nenhum horário disponível."
                     resposta = (
                         f"😕 O horário {nova_hora} no dia {nova_data} não está disponível.\n"
                         f"Aqui estão outras opções:\n{sugestoes_texto}"
@@ -129,7 +128,6 @@ def handle_ia():
             else:
                 resposta = "Não consegui entender claramente a data e hora. Tente algo como 'Quero remarcar para amanhã às 14h'."
 
-        # ✉️ SE NADA FOI EXTRAÍDO, ENTRA NA IA
         else:
             historico = supabase.table("mensagens_chat") \
                 .select("mensagem, tipo") \
@@ -158,7 +156,6 @@ def handle_ia():
             )
             resposta = nlu.choices[0].message.content.strip()
 
-        # GRAVA A RESPOSTA
         supabase.table("mensagens_chat").insert({
             "user_id": "ia",
             "mensagem": resposta,
