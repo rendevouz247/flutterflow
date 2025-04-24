@@ -114,10 +114,13 @@ def handle_ia():
 
                 if nova_hora in disponiveis:
                     try:
+                        cod_id_int = int(agendamento_id)
+                        app.logger.info(f"🧪 Tentando UPDATE com cod_id = {cod_id_int} (type: {type(cod_id_int)})")
+                    
                         update_result = supabase.table("agendamentos").update({
                             "nova_data": nova_data,
                             "nova_hora": nova_hora
-                        }).eq("cod_id", int(agendamento_id)).execute()
+                        }).eq("cod_id", cod_id_int).execute())
 
                         app.logger.info(f"💾 Resultado do UPDATE nova_data/nova_hora: {update_result}")
                     except Exception as err:
