@@ -17,6 +17,7 @@ groq_client = Groq(api_key=GROQ_API_KEY)
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
+
 # DICIONÁRIO DE EXPRESSÕES
 gatilhos = ["quero", "pode ser", "remarcar", "agendar", "agenda", "pra", "para", "às", "as"]
 
