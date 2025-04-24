@@ -137,8 +137,7 @@ def handle_ia():
 
                 if not disponiveis:
                     resposta = (
-                        f"⚠️ Infelizmente não há horários disponíveis para o dia {nova_data}.
-"
+                        f"⚠️ Infelizmente não há horários disponíveis para o dia {nova_data}.\n"
                         f"Por favor, envie outra data e horário para que eu possa verificar."
                     )
                 else:
@@ -148,7 +147,7 @@ def handle_ia():
                         try:
                             nova_data_timestamp = datetime.strptime(nova_data, "%Y-%m-%d")
                             nova_data_iso = nova_data_timestamp.isoformat()
-                            app.logger.info(f"🧲 Gravando nova_data = {nova_data_iso}, nova_hora = {match_hora}")
+                            app.logger.info(f"🨲 Gravando nova_data = {nova_data_iso}, nova_hora = {match_hora}")
 
                             supabase.table("agendamentos").update({
                                 "nova_data": nova_data_iso,
