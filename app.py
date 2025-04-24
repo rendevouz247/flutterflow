@@ -17,14 +17,29 @@ app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
 def extrair_data_hora(texto):
-    data = dateparser.parse(texto, languages=["pt", "fr", "en"])
-    hora_match = re.search(r"(\d{1,2})[:h](\d{0,2})", texto)
-    if data and hora_match:
-        hora = hora_match.group(1).zfill(2)
-        minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
-        hora_formatada = f"{hora}:{minuto}:01"
-        return data.date().isoformat(), hora_formatada
-    return None, None
+    try:
+        data = dateparser.search.search_dates(
+            texto,
+            languages=["pt", "en", "fr"],
+            settings={"PREFER_DATES_FROM": "future"}
+        )
+        if data:
+            data_encontrada = data[0][1].date().isoformat()
+        else:
+            return None, None
+
+        hora_match = re.search(r"(\\d{1,2})\\s?(?:h|hs|:)(\\d{0,2})?", texto)
+        if hora_match:
+            hora = hora_match.group(1).zfill(2)
+            minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
+            hora_formatada = f"{hora}:{minuto}:01"
+            return data_encontrada, hora_formatada
+
+        return data_encontrada, None
+    except Exception as e:
+        app.logger.error(f"❌ Erro em extrair_data_hora: {e}")
+        return None, None
+
 
 @app.route("/ia", methods=["POST"])
 def handle_ia():
