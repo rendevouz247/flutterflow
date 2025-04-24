@@ -4,6 +4,7 @@ from datetime import datetime
 from groq import Groq
 import os, logging, re
 import dateparser
+app.logger.info(f"📦 dateparser versão: {dateparser.__version__}")
 from dateparser.search import search_dates
 
 
