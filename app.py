@@ -147,7 +147,14 @@ def handle_ia():
                             .single().execute().data
                         
                         nova_data = dados_agendamento.get("nova_data")
+
+                        if not nova_data:
+                            resposta = "Tive um problema ao encontrar a data anterior. Pode me dizer novamente o dia e horário desejado?"
+                            app.logger.warning("⚠️ nova_data veio como None ao tentar gravar nova_hora.")
+                            return {"resposta": resposta}, 200
+                        
                         nova_data_iso = nova_data if isinstance(nova_data, str) else nova_data.isoformat()
+
 
                         app.logger.info(f"🧪 Gravando nova_data = {nova_data_timestamp}, nova_hora = {match_hora}")
 
