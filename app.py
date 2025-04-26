@@ -56,7 +56,7 @@ def extrair_data_hora(texto):
             settings={
                 "PREFER_DATES_FROM": "future",
                 "TIMEZONE": "America/Toronto",
-                "RETURN_AS_TIMEZONE_AWARE": False
+                "RETURN_AS_TIMEZONE_AWARE": True
             }
         )
 
@@ -64,10 +64,10 @@ def extrair_data_hora(texto):
             app.logger.warning("⚠️ Nenhuma data encontrada.")
             return None, None
 
-        data_detectada = resultado[0][1].date().isoformat()
+        data_detectada = resultado[0][1].astimezone().date().isoformat()
         app.logger.info(f"📆 Data identificada: {data_detectada}")
 
-        # ⚡ Nova regex melhorada para hora
+        # Melhor regex para capturar hora
         hora_match = re.search(r"\b(\d{1,2})(?:[:hH](\d{2}))?\b", texto)
         if hora_match:
             hora = hora_match.group(1).zfill(2)
@@ -82,6 +82,7 @@ def extrair_data_hora(texto):
     except Exception as e:
         app.logger.error(f"❌ Erro em extrair_data_hora: {e}")
         return None, None
+
 
 
 def gravar_mensagem_chat(user_id, mensagem, agendamento_id, tipo="IA"):
@@ -193,11 +194,16 @@ def handle_ia():
         else:
             nova_data, nova_hora = extrair_data_hora(mensagem)
             dados = buscar_agendamento(agendamento_id)
-
-            # 🛠️ Se não extrair data, usar a nova_data gravada
-            if not nova_data and dados and dados.get("nova_data"):
-                nova_data = dados["nova_data"][:10]  # garantir formato yyyy-mm-dd
-                app.logger.info(f"♻️ Usando nova_data gravada anteriormente: {nova_data}")
+        
+            # 🛠️ Se só extraiu hora (sem data explícita), usa nova_data gravada
+            if dados:
+                if not nova_data and dados.get("nova_data"):
+                    nova_data = dados["nova_data"][:10]
+                    app.logger.info(f"♻️ Usando nova_data gravada anteriormente: {nova_data}")
+        
+                # Verifica também se só mandou hora
+                if nova_data and not nova_hora:
+                    app.logger.info(f"⚠️ Apenas data detectada, sem hora.")
 
             if nova_data and nova_hora and dados:
                 disponibilidade = consultar_disponibilidade(dados["company_id"], dados["atend_id"], nova_data)
