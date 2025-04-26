@@ -53,8 +53,13 @@ def extrair_data_hora(texto):
         resultado = search_dates(
             texto,
             languages=["pt", "en", "fr"],
-            settings={"PREFER_DATES_FROM": "future"}
+            settings={
+                "PREFER_DATES_FROM": "future",
+                "TIMEZONE": "America/Sao_Paulo",
+                "RETURN_AS_TIMEZONE_AWARE": False
+            }
         )
+
 
         if not resultado:
             app.logger.warning("⚠️ Nenhuma data encontrada.")
