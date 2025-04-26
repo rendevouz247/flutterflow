@@ -192,20 +192,28 @@ def handle_ia():
             resposta = "Claro! Qual dia é melhor pra você? Pode dizer: 'amanhã', 'segunda às 14h', ou algo assim."
 
         else:
-            nova_data, nova_hora = extrair_data_hora(mensagem)
             dados = buscar_agendamento(agendamento_id)
-        
-            # 🛠️ Se só extraiu hora (sem data explícita), usa nova_data gravada
-            if dados:
-                if not nova_data and dados.get("nova_data"):
+
+            # Novo tratamento: Verifica se a mensagem é só hora (tipo 09:00)
+            if re.fullmatch(r"\d{1,2}[:hH]\d{2}", mensagem) and dados and dados.get("nova_data"):
+                # 🛠️ Cliente mandou só hora: usa nova_data gravada
+                nova_data = dados["nova_data"][:10]
+                hora_match = re.search(r"(\d{1,2})[:hH](\d{2})", mensagem)
+                if hora_match:
+                    hora = hora_match.group(1).zfill(2)
+                    minuto = hora_match.group(2)
+                    nova_hora = f"{hora}:{minuto}:01"
+                app.logger.info(f"♻️ Cliente mandou só hora, usando nova_data {nova_data} e nova_hora {nova_hora}")
+
+            else:
+                # 🛠️ Mensagem tem mais informações, extrair normalmente
+                nova_data, nova_hora = extrair_data_hora(mensagem)
+
+                if not nova_data and dados and dados.get("nova_data"):
                     nova_data = dados["nova_data"][:10]
                     app.logger.info(f"♻️ Usando nova_data gravada anteriormente: {nova_data}")
-        
-                # Verifica também se só mandou hora
-                if nova_data and not nova_hora:
-                    app.logger.info(f"⚠️ Apenas data detectada, sem hora.")
 
-            if nova_data and nova_hora and dados:
+            if nova_data and nova_hora:
                 disponibilidade = consultar_disponibilidade(dados["company_id"], dados["atend_id"], nova_data)
                 disponiveis = disponibilidade.get("horas_disponiveis", {}).get("disponiveis", [])
 
@@ -263,6 +271,7 @@ def handle_ia():
     except Exception as e:
         app.logger.error(f"❌ Erro: {e}")
         return {"erro": "Erro interno ao processar"}, 500
+
 
 
 if __name__ == "__main__":
