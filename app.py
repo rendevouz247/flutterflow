@@ -218,6 +218,13 @@ def handle_ia():
                 disponiveis = disponibilidade.get("horas_disponiveis", {}).get("disponiveis", [])
 
                 if not disponiveis:
+                    # Novo: Mesmo se não tem horários disponíveis, grava a nova_data
+                    supabase.table("agendamentos").update({
+                        "nova_data": nova_data,
+                        "nova_hora": None
+                    }).eq("cod_id", int(agendamento_id)).execute()
+                    app.logger.info(f"♻️ Gravado nova_data {nova_data} (sem hora ainda) no agendamento.")
+
                     resposta = (
                         f"⚠️ Infelizmente não há horários disponíveis para o dia {nova_data}.\n"
                         f"Por favor, envie outra data e horário para que eu possa verificar."
@@ -231,6 +238,13 @@ def handle_ia():
                         }).eq("cod_id", int(agendamento_id)).execute()
                         resposta = f"🔐 Posso confirmar sua remarcação para o dia {nova_data} às {match_hora}? Responda com *sim* ou *não*."
                     else:
+                        # Mesmo se horário exato não disponível, grava nova_data
+                        supabase.table("agendamentos").update({
+                            "nova_data": nova_data,
+                            "nova_hora": None
+                        }).eq("cod_id", int(agendamento_id)).execute()
+                        app.logger.info(f"♻️ Gravado nova_data {nova_data} após horário não disponível.")
+
                         sugestoes = disponiveis[:3]
                         sugestoes_texto = "\n".join([f"🔹 {h}" for h in sugestoes]) or "Nenhum horário disponível."
                         resposta = (
@@ -271,8 +285,6 @@ def handle_ia():
     except Exception as e:
         app.logger.error(f"❌ Erro: {e}")
         return {"erro": "Erro interno ao processar"}, 500
-
-
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
