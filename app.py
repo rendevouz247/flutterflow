@@ -56,27 +56,29 @@ def extrair_data_hora(texto):
             settings={"PREFER_DATES_FROM": "future"}
         )
 
-        if resultado:
-            data_encontrada = resultado[0][1].date().isoformat()
-            app.logger.info(f"📆 Data identificada: {data_encontrada}")
-        else:
+        if not resultado:
             app.logger.warning("⚠️ Nenhuma data encontrada.")
             return None, None
 
-        hora_match = re.search(r"(\d{1,2})\s?(?:h|hs|:)?(\d{0,2})", texto)
+        data_detectada = resultado[0][1].date().isoformat()
+        app.logger.info(f"📆 Data identificada: {data_detectada}")
+
+        # ⚡ Nova regex melhorada para hora
+        hora_match = re.search(r"\b(\d{1,2})(?:[:hH](\d{2}))?\b", texto)
         if hora_match:
             hora = hora_match.group(1).zfill(2)
-            minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
+            minuto = hora_match.group(2) if hora_match.group(2) else "00"
             hora_formatada = f"{hora}:{minuto}:01"
             app.logger.info(f"⏰ Hora identificada: {hora_formatada}")
-            return data_encontrada, hora_formatada
+            return data_detectada, hora_formatada
 
         app.logger.warning("⚠️ Nenhuma hora encontrada.")
-        return data_encontrada, None
+        return data_detectada, None
 
     except Exception as e:
         app.logger.error(f"❌ Erro em extrair_data_hora: {e}")
         return None, None
+
 
 def gravar_mensagem_chat(user_id, mensagem, agendamento_id, tipo="IA"):
     """Grava uma mensagem no chat."""
@@ -113,10 +115,17 @@ def consultar_disponibilidade(company_id, atend_id, nova_data):
             .eq("atend_id", atend_id) \
             .eq("date", nova_data) \
             .maybe_single().execute()
+
+        if not resultado or not getattr(resultado, 'data', None):
+            app.logger.warning(f"⚠️ Nenhuma disponibilidade encontrada para {nova_data}.")
+            return {}
+
         return resultado.data or {}
+
     except Exception as e:
         app.logger.error(f"❌ Erro ao consultar disponibilidade: {e}")
         return {}
+
 
 def gerar_resposta_ia(mensagens):
     """Gera uma resposta da IA usando Groq."""
