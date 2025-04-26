@@ -54,9 +54,7 @@ def extrair_data_hora(texto):
             texto,
             languages=["pt", "en", "fr"],
             settings={
-                "PREFER_DATES_FROM": "future",
-                "TIMEZONE": "America/Toronto",
-                "RETURN_AS_TIMEZONE_AWARE": True
+                "PREFER_DATES_FROM": "future"
             }
         )
 
@@ -64,25 +62,25 @@ def extrair_data_hora(texto):
             app.logger.warning("⚠️ Nenhuma data encontrada.")
             return None, None
 
-        data_detectada = resultado[0][1].astimezone().date().isoformat()
+        # ⚡ Pegamos somente a data da resposta
+        data_detectada = resultado[0][1].date().isoformat()
         app.logger.info(f"📆 Data identificada: {data_detectada}")
 
-        # Melhor regex para capturar hora
-        hora_match = re.search(r"\b(\d{1,2})(?:[:hH](\d{2}))?\b", texto)
+        # ⚡ Pegamos a hora manualmente do texto via regex
+        hora_match = re.search(r"\b(\d{1,2})[:hH](\d{2})\b", texto)
         if hora_match:
             hora = hora_match.group(1).zfill(2)
-            minuto = hora_match.group(2) if hora_match.group(2) else "00"
+            minuto = hora_match.group(2).zfill(2)
             hora_formatada = f"{hora}:{minuto}:01"
             app.logger.info(f"⏰ Hora identificada: {hora_formatada}")
             return data_detectada, hora_formatada
 
-        app.logger.warning("⚠️ Nenhuma hora encontrada.")
+        app.logger.warning("⚠️ Nenhuma hora encontrada no texto.")
         return data_detectada, None
 
     except Exception as e:
         app.logger.error(f"❌ Erro em extrair_data_hora: {e}")
         return None, None
-
 
 
 def gravar_mensagem_chat(user_id, mensagem, agendamento_id, tipo="IA"):
