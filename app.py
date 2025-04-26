@@ -55,11 +55,10 @@ def extrair_data_hora(texto):
             languages=["pt", "en", "fr"],
             settings={
                 "PREFER_DATES_FROM": "future",
-                "TIMEZONE": "America/Sao_Paulo",
+                "TIMEZONE": "America/Toronto",
                 "RETURN_AS_TIMEZONE_AWARE": False
             }
         )
-
 
         if not resultado:
             app.logger.warning("⚠️ Nenhuma data encontrada.")
@@ -195,6 +194,11 @@ def handle_ia():
             nova_data, nova_hora = extrair_data_hora(mensagem)
             dados = buscar_agendamento(agendamento_id)
 
+            # 🛠️ Se não extrair data, usar a nova_data gravada
+            if not nova_data and dados and dados.get("nova_data"):
+                nova_data = dados["nova_data"][:10]  # garantir formato yyyy-mm-dd
+                app.logger.info(f"♻️ Usando nova_data gravada anteriormente: {nova_data}")
+
             if nova_data and nova_hora and dados:
                 disponibilidade = consultar_disponibilidade(dados["company_id"], dados["atend_id"], nova_data)
                 disponiveis = disponibilidade.get("horas_disponiveis", {}).get("disponiveis", [])
@@ -253,6 +257,7 @@ def handle_ia():
     except Exception as e:
         app.logger.error(f"❌ Erro: {e}")
         return {"erro": "Erro interno ao processar"}, 500
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
