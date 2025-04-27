@@ -52,49 +52,45 @@ def normalizar_texto(texto):
     return texto
 
 def extrair_data_hora(texto):
-    try:
-        app.logger.info(f"🔍 Tentando extrair de: {texto}")
+    print(f"🔍 Buscando data e hora em: {texto}")
 
-        # 1️⃣ Normaliza o texto
-        texto_original = texto
-        texto = texto.lower().strip()
-        texto = re.sub(r"\bdia\s+", "", texto, flags=re.IGNORECASE)
-        texto = re.sub(r"\s+às\s+", " às ", texto, flags=re.IGNORECASE)
-        texto = re.sub(r"\s+as\s+", " às ", texto, flags=re.IGNORECASE)
+    data_encontrada = None
+    hora_encontrada = None
 
-        # 2️⃣ Tenta extrair primeiro a data
-        resultado_data = search_dates(
-            texto,
-            languages=["pt", "en", "fr"],
-            settings={"PREFER_DATES_FROM": "future"}
-        )
+    # Primeiro, buscamos padrões explícitos de hora no texto
+    match_hora = re.search(r"\b(\d{1,2}):(\d{2})\b", texto)
+    if match_hora:
+        hora_texto = match_hora.group()
+        try:
+            hora_encontrada = datetime.strptime(hora_texto, "%H:%M").time()
+            print(f"⏰ Hora extraída diretamente: {hora_encontrada}")
+        except ValueError:
+            print("❌ Formato de hora inválido encontrado.")
 
-        data_encontrada = None
-        if resultado_data:
-            data_encontrada = resultado_data[0][1].date().isoformat()
-            app.logger.info(f"📅 Data identificada: {data_encontrada}")
+    # Agora buscamos a data usando o search_dates
+    resultados = search_dates(texto, settings={
+        'PREFER_DATES_FROM': 'future',
+        'RELATIVE_BASE': datetime.now(),
+        'TIMEZONE': 'America/Toronto',
+        'RETURN_AS_TIMEZONE_AWARE': False
+    })
 
-            # 🧹 Remove a parte da data do texto antes de buscar a hora
-            texto_sem_data = texto.replace(resultado_data[0][0], '').strip()
-        else:
-            app.logger.warning("⚠️ Nenhuma data encontrada.")
-            texto_sem_data = texto
+    if resultados:
+        for resultado in resultados:
+            texto_detectado, data_detectada = resultado
+            # Se o texto detectado for um horário isolado que já pegamos, ignorar
+            if re.fullmatch(r"\d{1,2}:\d{2}", texto_detectado):
+                continue
+            data_encontrada = data_detectada.date()
+            print(f"📅 Data extraída: {data_encontrada}")
+            break
 
-        # 3️⃣ Agora extrai a hora separadamente do texto limpo
-        hora_match = re.search(r"(\d{1,2})(?:h|hs|:)?(\d{0,2})?", texto_sem_data)
-        if hora_match:
-            hora = hora_match.group(1).zfill(2)
-            minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
-            hora_formatada = f"{hora}:{minuto}:01"
-            app.logger.info(f"⏰ Hora identificada: {hora_formatada}")
-            return data_encontrada, hora_formatada
-        else:
-            app.logger.warning("⚠️ Nenhuma hora encontrada.")
-            return data_encontrada, None
+    if not data_encontrada:
+        print("⚠️ Nenhuma data encontrada.")
+    if not hora_encontrada:
+        print("⚠️ Nenhuma hora encontrada.")
 
-    except Exception as e:
-        app.logger.error(f"❌ Erro em extrair_data_hora: {e}")
-        return None, None
+    return data_encontrada, hora_encontrada
 
 def gravar_mensagem_chat(user_id, mensagem, agendamento_id, tipo="IA"):
     """Grava uma mensagem no chat."""
