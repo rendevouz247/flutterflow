@@ -235,7 +235,7 @@ def handle_ia():
                     )
             
                 else:
-                    hora_cliente = nova_hora.strftime("%H:%M") if isinstance(nova_hora, datetime.time) else str(nova_hora)[:5]
+                    hora_cliente = nova_hora.strftime("%H:%M") if hasattr(nova_hora, 'strftime') else str(nova_hora)[:5]
                     match_hora = next((h for h in disponiveis if hora_cliente in h or h.startswith(hora_cliente)), None)
             
                     if match_hora:
@@ -252,7 +252,7 @@ def handle_ia():
                             "nova_data": nova_data,
                             "nova_hora": None
                         }).eq("cod_id", int(agendamento_id)).execute()
-                        app.logger.info(f"♻️ Gravado nova_data {nova_data} sem horário (hora solicitada não disponível).")
+                        app.logger.info(f"♻️ Gravado nova_data {nova_data} após horário não disponível.")
             
                         sugestoes = disponiveis[:3]
                         sugestoes_texto = "\n".join([f"🔹 {h}" for h in sugestoes]) or "Nenhum horário disponível."
@@ -260,6 +260,7 @@ def handle_ia():
                             f"😕 O horário {hora_cliente} no dia {nova_data} não está disponível.\n"
                             f"Aqui estão outras opções:\n{sugestoes_texto}"
                         )
+
 
             elif nova_data:
                 # Atualiza nova_data mesmo sem hora
