@@ -235,9 +235,9 @@ def handle_ia():
                     )
             
                 else:
-                    # Procura se a hora solicitada está disponível
-                    hora_formatada = nova_hora.strftime("%H:%M") if isinstance(nova_hora, datetime.time) else str(nova_hora)[:5]
-                    match_hora = next((h for h in disponiveis if hora_formatada in h or h.startswith(hora_formatada)), None)
+                    # Agora valida se a hora pedida existe nos disponíveis
+                    hora_cliente = nova_hora.strftime("%H:%M") if isinstance(nova_hora, datetime.time) else str(nova_hora)[:5]
+                    match_hora = next((h for h in disponiveis if hora_cliente in h or h.startswith(hora_cliente)), None)
             
                     if match_hora:
                         supabase.table("agendamentos").update({
@@ -258,9 +258,10 @@ def handle_ia():
                         sugestoes = disponiveis[:3]
                         sugestoes_texto = "\n".join([f"🔹 {h}" for h in sugestoes]) or "Nenhum horário disponível."
                         resposta = (
-                            f"😕 O horário {hora_formatada} no dia {nova_data} não está disponível.\n"
+                            f"😕 O horário {hora_cliente} no dia {nova_data} não está disponível.\n"
                             f"Aqui estão outras opções:\n{sugestoes_texto}"
                         )
+
 
             elif nova_data:
                 # Atualiza nova_data mesmo sem hora
