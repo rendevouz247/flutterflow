@@ -55,54 +55,42 @@ def extrair_data_hora(texto):
     try:
         app.logger.info(f"🔍 Tentando extrair de: {texto}")
 
-        texto = normalizar_texto(texto)
+        # 1️⃣ Normaliza o texto
+        texto_original = texto
+        texto = texto.lower().strip()
+        texto = re.sub(r"\bdia\s+", "", texto, flags=re.IGNORECASE)
+        texto = re.sub(r"\s+às\s+", " às ", texto, flags=re.IGNORECASE)
+        texto = re.sub(r"\s+as\s+", " às ", texto, flags=re.IGNORECASE)
 
-        # 🔵 Primeiro, tentar extrair manualmente se for só uma data no formato dd/mm/yyyy
-        match = re.search(r"\b(\d{2})/(\d{2})/(\d{4})\b", texto)
-        if match:
-            dia, mes, ano = match.groups()
-            data_manual = f"{ano}-{mes}-{dia}"
-            app.logger.info(f"📅 Data manual identificada: {data_manual}")
-
-            hora_match = re.search(r"(?:(?:às?|as)?\s*)(\d{1,2})(?::(\d{2}))?", texto)
-            if hora_match:
-                hora = hora_match.group(1).zfill(2)
-                minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
-                hora_formatada = f"{hora}:{minuto}:01"
-                app.logger.info(f"⏰ Hora identificada: {hora_formatada}")
-                return data_manual, hora_formatada
-            else:
-                app.logger.warning("⚠️ Nenhuma hora encontrada no texto.")
-                return data_manual, None
-
-        # 🔥 Se não for um caso manual, usa o search_dates normalmente
-        resultado = search_dates(
+        # 2️⃣ Tenta extrair primeiro a data
+        resultado_data = search_dates(
             texto,
             languages=["pt", "en", "fr"],
-            settings={
-                "PREFER_DATES_FROM": "future",
-                "DATE_ORDER": "DMY",
-                "STRICT_PARSING": True
-            }
+            settings={"PREFER_DATES_FROM": "future"}
         )
 
-        if resultado:
-            data_encontrada = resultado[0][1].date().isoformat()
-            app.logger.info(f"📆 Data final: {data_encontrada}")
+        data_encontrada = None
+        if resultado_data:
+            data_encontrada = resultado_data[0][1].date().isoformat()
+            app.logger.info(f"📅 Data identificada: {data_encontrada}")
+
+            # 🧹 Remove a parte da data do texto antes de buscar a hora
+            texto_sem_data = texto.replace(resultado_data[0][0], '').strip()
         else:
             app.logger.warning("⚠️ Nenhuma data encontrada.")
-            return None, None
+            texto_sem_data = texto
 
-        hora_match = re.search(r"(\d{1,2})\s?(?:h|hs|:)?(\d{0,2})", texto)
+        # 3️⃣ Agora extrai a hora separadamente do texto limpo
+        hora_match = re.search(r"(\d{1,2})(?:h|hs|:)?(\d{0,2})?", texto_sem_data)
         if hora_match:
             hora = hora_match.group(1).zfill(2)
             minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
             hora_formatada = f"{hora}:{minuto}:01"
             app.logger.info(f"⏰ Hora identificada: {hora_formatada}")
             return data_encontrada, hora_formatada
-
-        app.logger.warning("⚠️ Nenhuma hora encontrada.")
-        return data_encontrada, None
+        else:
+            app.logger.warning("⚠️ Nenhuma hora encontrada.")
+            return data_encontrada, None
 
     except Exception as e:
         app.logger.error(f"❌ Erro em extrair_data_hora: {e}")
