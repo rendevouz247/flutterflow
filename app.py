@@ -209,89 +209,104 @@ def handle_ia():
     if not user_id or not mensagem or not agendamento_id:
         return {"erro": "Dados incompletos"}, 400
 
+    # 1) Busca agendamento atual
     dados = buscar_agendamento(agendamento_id)
     nova_data = None
     nova_hora = None
     resposta = ""
 
-    # 1) Intenção: disponibilidade
+    # 2) Intenção: disponibilidade
     if any(k in mensagem for k in ["disponível", "vagas"]):
-        dispo = consultar_disponibilidade(dados.get("company_id"), dados.get("atend_id"), dados.get("nova_data"))
-        slots = dispo.get("horas_disponiveis", {}).get("disponiveis", [])[:3]
-        if slots:
-            resposta = "Tenho vagas nestes horários:\n" + "\n".join(f"– {h}" for h in slots)
+        disponiveis = consultar_disponibilidade(
+            dados["company_id"], dados["atend_id"], dados.get("nova_data")
+        ).get("horas_disponiveis", {}).get("disponiveis", [])
+        if disponiveis:
+            resposta = "Tenho vagas nestes horários:\n" + "\n".join(f"– {h[:5]}" for h in disponiveis)
         else:
-            date_str = fmt_data(date.fromisoformat(dados.get("nova_data"))) if dados.get("nova_data") else "essa data"
             tpl = random.choice(NO_SLOTS_TEMPLATES)
-            resposta = tpl.format(date=date_str)
+            resposta = tpl.format(date=fmt_data(date.fromisoformat(dados["nova_data"][:10])))
+        app.logger.info(f"💬 Disponibilidade respondida: {resposta}")
 
-    # 2) Confirmação positiva
-    elif mensagem in ["y", "yes", "sim", "oui", "ok", "claro", "s", "pode"]:
-        if dados.get("nova_data") and dados.get("nova_hora"):
-            d_obj = datetime.fromisoformat(dados["nova_data"]).date()
-            t_str = dados["nova_hora"][0:5]
-            resposta = random.choice(CONFIRM_TEMPLATES).format(date=fmt_data(d_obj), time=t_str)
-            app.logger.info(f"♻️ Gravando confirmação: date={dados['nova_data']} horas={dados['nova_hora']}")
-            supabase.table("agendamentos").update({
-                "date": dados["nova_data"],
-                "horas": dados["nova_hora"],
-                "status": "Reagendado",
-                "reagendando": False,
-                "chat_ativo": False
-            }).eq("cod_id", int(agendamento_id)).execute()
-        else:
-            resposta = "Hmm... não encontrei sugestão de horário. Pode dizer dia e hora?"
+    # 3) Confirmação positiva (inclui “ok”)
+    elif mensagem in ["y", "yes", "sim", "oui", "ok"]:
+        d_obj = datetime.fromisoformat(dados["nova_data"]).date()
+        t_str = dados["nova_hora"][:5]
+        resposta = random.choice(CONFIRM_TEMPLATES).format(date=fmt_data(d_obj), time=t_str)
+        supabase.table("agendamentos").update({
+            "date": dados["nova_data"],
+            "horas": dados["nova_hora"],
+            "status": "Reagendado",
+            "reagendando": False,
+            "chat_ativo": False
+        }).eq("cod_id", int(agendamento_id)).execute()
+        app.logger.info(f"♻️ Gravação da confirmação no banco")
 
-    # 3) Confirmação negativa
+    # 4) Confirmação negativa
     elif mensagem in ["n", "não", "no", "non"]:
         resposta = "Tranquilo! Qual outro dia e horário funcionam melhor pra você? 😉"
-        supabase.table("agendamentos").update({"nova_data": None, "nova_hora": None}) \
-            .eq("cod_id", int(agendamento_id)).execute()
+        supabase.table("agendamentos").update({
+            "nova_data": None,
+            "nova_hora": None
+        }).eq("cod_id", int(agendamento_id)).execute()
         app.logger.info(f"♻️ Reset slots no agendamento {agendamento_id}")
 
-    # 4) Iniciar reagendamento
+    # 5) Iniciar reagendamento
     elif mensagem == "r":
         resposta = "Claro! Qual dia é melhor pra você?"
-        supabase.table("agendamentos").update({"reagendando": True, "nova_data": None, "nova_hora": None}) \
-            .eq("cod_id", int(agendamento_id)).execute()
+        supabase.table("agendamentos").update({
+            "reagendando": True,
+            "nova_data": None,
+            "nova_hora": None
+        }).eq("cod_id", int(agendamento_id)).execute()
         app.logger.info(f"♻️ Iniciando reagendamento no agendamento {agendamento_id}")
 
-    # 5) Cliente forneceu data/hora
+    # 6) Processamento de data/hora informada
     else:
-        nova_data, nova_hora = extrair_data_hora(mensagem)
-        if nova_data and nova_hora:
-            app.logger.info(f"🔍 Cliente enviou data e hora: {nova_data}, {nova_hora}")
-            dispo = consultar_disponibilidade(dados.get("company_id"), dados.get("atend_id"), nova_data.isoformat())
-            slots = dispo.get("horas_disponiveis", {}).get("disponiveis", [])
-            if nova_hora.strftime("%H:%M") in [h[:5] for h in slots]:
-                app.logger.info(f"♻️ Gravando nova_data {nova_data} e nova_hora {nova_hora} no agendamento.")
-                supabase.table("agendamentos").update({"nova_data": nova_data.isoformat(), "nova_hora": nova_hora.isoformat()}) \
-                    .eq("cod_id", int(agendamento_id)).execute()
-                resposta = f"🔐 Posso confirmar a remarcação para o dia {fmt_data(nova_data)} às {nova_hora.strftime('%H:%M')}? Responda com sim ou não."
-            else:
-                app.logger.info(f"⚠️ Hora {nova_hora} não disponível em {slots}")
-                tpl = random.choice(NO_SLOTS_TEMPLATES)
-                resposta = tpl.format(date=fmt_data(nova_data)) + " Por favor, escolha outro horário."
-        elif nova_data:
-               # 1) Carrega disponibilidade para essa data
-               disponiveis = consultar_disponibilidade(
-                   dados["company_id"],
-                   dados["atend_id"],
-                   nova_data.isoformat()
-               ).get("horas_disponiveis", {}).get("disponiveis", [])
-           
-               if disponiveis:
-                   # 2) Lista os horários disponíveis (HH:MM)
-                   resposta = "Tenho vagas nestes horários:\n" + "\n".join(f"– {h[:5]}" for h in disponiveis)
-               else:
-                   # 3) Se realmente não houver, avisa sem slots
-                   tpl = random.choice(NO_SLOTS_TEMPLATES)
-                   resposta = tpl.format(date=fmt_data(nova_data))
-           
-               app.logger.info(f"💬 Listando slots para {nova_data}: {disponiveis}")
+        from datetime import date, time
 
+        # 6a) Apenas hora, mas já temos nova_data
+        if re.fullmatch(r"\d{1,2}:\d{2}", mensagem) and dados.get("nova_data"):
+            h, m = map(int, mensagem.split(":"))
+            nova_data = date.fromisoformat(dados["nova_data"][:10])
+            nova_hora = time(h, m)
+            app.logger.info(f"⏰ Hora isolada detectada; usando {nova_data} {nova_hora}")
+
+        # 6b) Extrai data e hora juntos
         else:
-            app.logger.info("💬 Fallback IA acionado")
+            nova_data, nova_hora = extrair_data_hora(mensagem)
+
+        # 7) Se vier data+hora, grava e pergunta confirmação
+        if nova_data and nova_hora:
+            supabase.table("agendamentos").update({
+                "nova_data": nova_data.isoformat(),
+                "nova_hora": nova_hora.strftime("%H:%M:%S")
+            }).eq("cod_id", int(agendamento_id)).execute()
+            resposta = (
+                f"🔐 Posso confirmar a remarcação para {fmt_data(nova_data)} "
+                f"às {nova_hora.strftime('%H:%M')}? Responda com sim ou não."
+            )
+            app.logger.info(f"♻️ Gravado nova_data {nova_data} e nova_hora {nova_hora}")
+
+        # 8) Se vier só data, grava e lista horários disponíveis
+        elif nova_data:
+            supabase.table("agendamentos").update({
+                "nova_data": nova_data.isoformat(),
+                "nova_hora": None
+            }).eq("cod_id", int(agendamento_id)).execute()
+            app.logger.info(f"♻️ Gravado nova_data {nova_data} (sem hora)")
+
+            disponiveis = consultar_disponibilidade(
+                dados["company_id"], dados["atend_id"], nova_data.isoformat()
+            ).get("horas_disponiveis", {}).get("disponiveis", [])
+            if disponiveis:
+                resposta = "Tenho vagas nestes horários:\n" + "\n".join(f"– {h[:5]}" for h in disponiveis)
+            else:
+                tpl = random.choice(NO_SLOTS_TEMPLATES)
+                resposta = tpl.format(date=fmt_data(nova_data))
+            app.logger.info(f"💬 Listando slots para {nova_data}: {disponiveis}")
+
+        # 9) Fallback para IA
+        else:
             historico = supabase.table("mensagens_chat") \
                 .select("mensagem,tipo") \
                 .eq("agendamento_id", int(agendamento_id)) \
@@ -301,10 +316,14 @@ def handle_ia():
                 for m in historico
             ]
             msgs.append({"role": "user", "content": mensagem})
-            msgs.insert(0, {"role":"system","content":
-                         "Você é uma atendente virtual simpática. Nunca confirme horários sem o cliente for sim."})
+            msgs.insert(0, {
+                "role": "system",
+                "content": "Você é uma atendente virtual simpática. Nunca confirme horários sem o cliente for sim."
+            })
             resposta = gerar_resposta_ia(msgs)
+            app.logger.info("💬 Fallback IA acionado")
 
+    # 10) Grava a resposta e retorna
     gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
     app.logger.info(f"💬 Resposta final: {resposta}")
     return {"resposta": resposta}, 200
