@@ -1,7 +1,7 @@
 from flask import Flask, request
 import os, logging, re, random
 from datetime import datetime, timedelta, date
-import dateparser
+dateparser  # noqa: F401
 from dateparser.search import search_dates
 from supabase import create_client
 from groq import Groq
@@ -56,7 +56,7 @@ def extrair_data_hora(texto: str):
         try:
             hora_encontrada = datetime.strptime(match_hora.group(), "%H:%M").time()
         except ValueError:
-            pass
+            app.logger.info(f"❌ Formato de hora inválido: {match_hora.group()}")
 
     # Extrair data (com DMY e pt)
     settings = {
@@ -75,6 +75,7 @@ def extrair_data_hora(texto: str):
                 data_encontrada = dt.date()
                 break
 
+    app.logger.info(f"🔎 extrair_data_hora -> data: {data_encontrada}, hora: {hora_encontrada}")
     return data_encontrada, hora_encontrada
 
 
@@ -87,6 +88,7 @@ def gravar_mensagem_chat(user_id, mensagem, agendamento_id, tipo="IA"):
             "data_envio": datetime.utcnow().isoformat(),
             "tipo": tipo
         }).execute()
+        app.logger.info(f"💬 Mensagem gravada no chat: {mensagem}")
     except Exception as e:
         app.logger.error(f"❌ Erro ao gravar chat: {e}")
 
@@ -97,7 +99,9 @@ def buscar_agendamento(cod_id):
             .select("nova_data, nova_hora, company_id, atend_id") \
             .eq("cod_id", int(cod_id)) \
             .single().execute()
-        return res.data
+        dados = res.data or {}
+        app.logger.info(f"🔍 Dados do agendamento: {dados}")
+        return dados
     except Exception as e:
         app.logger.error(f"❌ Erro ao buscar agendamento: {e}")
         return {}
@@ -105,13 +109,17 @@ def buscar_agendamento(cod_id):
 
 def consultar_disponibilidade(company_id, atend_id, nova_data):
     try:
+        app.logger.info(f"🔍 consultando disponibilidade para company_id={company_id}, atend_id={atend_id}, date={nova_data}")
         res = supabase.table("view_horas_disponiveis") \
             .select("horas_disponiveis") \
             .eq("company_id", company_id) \
             .eq("atend_id", atend_id) \
             .eq("date", nova_data) \
             .maybe_single().execute()
-        return res.data or {}
+        dispo = res.data or {}
+        slots = dispo.get("horas_disponiveis", {}).get("disponiveis", [])
+        app.logger.info(f"✅ disponibilidade retornada: {slots}")
+        return dispo
     except Exception as e:
         app.logger.error(f"❌ Erro na disponibilidade: {e}")
         return {}
@@ -119,13 +127,16 @@ def consultar_disponibilidade(company_id, atend_id, nova_data):
 
 def gerar_resposta_ia(mensagens):
     try:
+        app.logger.info(f"💭 Prompt IA:\n{mensagens}")
         resp = groq_client.chat.completions.create(
             model="llama3-8b-8192",
             messages=mensagens,
             temperature=0.7,
             max_tokens=400
         )
-        return resp.choices[0].message.content.strip()
+        resposta = resp.choices[0].message.content.strip()
+        app.logger.info(f"💡 Resposta do Groq: {resposta}")
+        return resposta
     except Exception as e:
         app.logger.error(f"❌ Erro no Groq: {e}")
         return "Desculpe, ocorreu um problema. Pode tentar novamente?"
@@ -143,7 +154,6 @@ def handle_ia():
     if not user_id or not mensagem or not agendamento_id:
         return {"erro": "Dados incompletos"}, 400
 
-    # Carrega dados e define slots iniciais
     dados = buscar_agendamento(agendamento_id)
     nova_data = None
     nova_hora = None
@@ -166,6 +176,7 @@ def handle_ia():
             d_obj = date.fromisoformat(dados["nova_data"])
             t_str = dados["nova_hora"][0:5]
             resposta = random.choice(CONFIRM_TEMPLATES).format(date=fmt_data(d_obj), time=t_str)
+            app.logger.info(f"♻️ Gravando confirmação: date={dados['nova_data']} horas={dados['nova_hora']}")
             supabase.table("agendamentos").update({
                 "date": dados["nova_data"],
                 "horas": dados["nova_hora"],
@@ -181,36 +192,39 @@ def handle_ia():
         resposta = "Tranquilo! Qual outro dia e horário funcionam melhor pra você? 😉"
         supabase.table("agendamentos").update({"nova_data": None, "nova_hora": None}) \
             .eq("cod_id", int(agendamento_id)).execute()
+        app.logger.info(f"♻️ Reset slots no agendamento {agendamento_id}")
 
     # 4) Iniciar reagendamento
     elif mensagem == "r":
         resposta = "Claro! Qual dia é melhor pra você?"
         supabase.table("agendamentos").update({"reagendando": True, "nova_data": None, "nova_hora": None}) \
             .eq("cod_id", int(agendamento_id)).execute()
+        app.logger.info(f"♻️ Iniciando reagendamento no agendamento {agendamento_id}")
 
     # 5) Cliente forneceu data/hora
     else:
         nova_data, nova_hora = extrair_data_hora(mensagem)
         if nova_data and nova_hora:
-            # Verifica disponibilidade
+            app.logger.info(f"🔍 Cliente enviou data e hora: {nova_data}, {nova_hora}")
             dispo = consultar_disponibilidade(dados.get("company_id"), dados.get("atend_id"), nova_data.isoformat())
             slots = dispo.get("horas_disponiveis", {}).get("disponiveis", [])
-            if nova_hora.isoformat()[0:5] in [h[0:5] for h in slots]:
-                # grava e pergunta confirmação
+            if nova_hora.strftime("%H:%M") in [h[:5] for h in slots]:
+                app.logger.info(f"♻️ Gravando nova_data {nova_data} e nova_hora {nova_hora} no agendamento.")
                 supabase.table("agendamentos").update({"nova_data": nova_data.isoformat(), "nova_hora": nova_hora.isoformat()}) \
                     .eq("cod_id", int(agendamento_id)).execute()
                 resposta = f"🔐 Posso confirmar a remarcação para o dia {fmt_data(nova_data)} às {nova_hora.strftime('%H:%M')}? Responda com sim ou não."
             else:
+                app.logger.info(f"⚠️ Hora {nova_hora} não disponível em {slots}")
                 tpl = random.choice(NO_SLOTS_TEMPLATES)
                 resposta = tpl.format(date=fmt_data(nova_data)) + " Por favor, escolha outro horário."
         elif nova_data:
-            # data ok, falta hora
+            app.logger.info(f"♻️ Gravando apenas nova_data {nova_data} (sem hora) no agendamento.")
             supabase.table("agendamentos").update({"nova_data": nova_data.isoformat(), "nova_hora": None}) \
                 .eq("cod_id", int(agendamento_id)).execute()
             tpl = ASK_TIME_TEMPLATES[0]
             resposta = tpl.format(date=fmt_data(nova_data))
         else:
-            # fallback para IA
+            app.logger.info("💬 Fallback IA acionado")
             historico = supabase.table("mensagens_chat") \
                 .select("mensagem,tipo") \
                 .eq("agendamento_id", int(agendamento_id)) \
@@ -224,11 +238,11 @@ def handle_ia():
                          "Você é uma atendente virtual simpática. Nunca confirme horários sem o cliente for sim."})
             resposta = gerar_resposta_ia(msgs)
 
-    # Grava resposta e retorna
     gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
-    app.logger.info(f"💬 Resposta: {resposta}")
+    app.logger.info(f"💬 Resposta final: {resposta}")
     return {"resposta": resposta}, 200
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
