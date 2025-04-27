@@ -201,19 +201,17 @@ def handle_ia():
         else:
             dados = buscar_agendamento(agendamento_id)
 
-            # Novo tratamento: Verifica se a mensagem é só hora (tipo 09:00)
+            # Cliente mandou só hora? (ex: 09:00)
             if re.fullmatch(r"\d{1,2}[:hH]\d{2}", mensagem) and dados and dados.get("nova_data"):
-                # 🛠️ Cliente mandou só hora: usa nova_data gravada
                 nova_data = dados["nova_data"][:10]
                 hora_match = re.search(r"(\d{1,2})[:hH](\d{2})", mensagem)
                 if hora_match:
                     hora = hora_match.group(1).zfill(2)
-                    minuto = hora_match.group(2)
+                    minuto = hora_match.group(2).zfill(2)
                     nova_hora = f"{hora}:{minuto}:01"
                 app.logger.info(f"♻️ Cliente mandou só hora, usando nova_data {nova_data} e nova_hora {nova_hora}")
 
             else:
-                # 🛠️ Mensagem tem mais informações, extrair normalmente
                 nova_data, nova_hora = extrair_data_hora(mensagem)
 
                 if not nova_data and dados and dados.get("nova_data"):
@@ -225,7 +223,6 @@ def handle_ia():
                 disponiveis = disponibilidade.get("horas_disponiveis", {}).get("disponiveis", [])
 
                 if not disponiveis:
-                    # Novo: Mesmo se não tem horários disponíveis, grava a nova_data
                     supabase.table("agendamentos").update({
                         "nova_data": nova_data,
                         "nova_hora": None
@@ -243,9 +240,10 @@ def handle_ia():
                             "nova_data": nova_data,
                             "nova_hora": match_hora
                         }).eq("cod_id", int(agendamento_id)).execute()
+                        app.logger.info(f"📝 Gravado nova_data {nova_data} e nova_hora {match_hora} no agendamento.")
+
                         resposta = f"🔐 Posso confirmar sua remarcação para o dia {nova_data} às {match_hora}? Responda com *sim* ou *não*."
                     else:
-                        # Mesmo se horário exato não disponível, grava nova_data
                         supabase.table("agendamentos").update({
                             "nova_data": nova_data,
                             "nova_hora": None
@@ -258,7 +256,19 @@ def handle_ia():
                             f"😕 O horário {nova_hora} no dia {nova_data} não está disponível.\n"
                             f"Aqui estão outras opções:\n{sugestoes_texto}"
                         )
+
+            elif nova_data:
+                # Atualiza nova_data mesmo sem hora
+                supabase.table("agendamentos").update({
+                    "nova_data": nova_data,
+                    "nova_hora": None
+                }).eq("cod_id", int(agendamento_id)).execute()
+                app.logger.info(f"♻️ Gravado nova_data {nova_data} (sem hora) no agendamento.")
+
+                resposta = f"Posso confirmar a remarcação para o dia {nova_data}? Se sim, por favor, informe também o horário. 😉"
+
             else:
+                # Nenhuma data entendida
                 historico = supabase.table("mensagens_chat") \
                     .select("mensagem, tipo") \
                     .eq("agendamento_id", int(agendamento_id)) \
@@ -292,6 +302,7 @@ def handle_ia():
     except Exception as e:
         app.logger.error(f"❌ Erro: {e}")
         return {"erro": "Erro interno ao processar"}, 500
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
