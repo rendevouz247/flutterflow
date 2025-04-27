@@ -5,6 +5,7 @@ import dateparser
 from dateparser.search import search_dates
 from supabase import create_client
 from groq import Groq
+from dateutil import tz
 
 # ==== CONFIG ====
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -62,9 +63,10 @@ def extrair_data_hora(texto):
             app.logger.warning("⚠️ Nenhuma data encontrada.")
             return None, None
 
-        # ⚡ Pegamos somente a data da resposta
-        data_detectada = resultado[0][1].date().isoformat()
-        app.logger.info(f"📆 Data identificada: {data_detectada}")
+        # 📅 Forçar a timezone de Montreal
+        timezone_toronto = tz.gettz('America/Toronto')
+        data_detectada = resultado[0][1].astimezone(timezone_toronto).date().isoformat()
+        app.logger.info(f"📆 Data ajustada para Montreal: {data_detectada}")
 
         # ⚡ Pegamos a hora manualmente do texto via regex
         hora_match = re.search(r"\b(\d{1,2})[:hH](\d{2})\b", texto)
