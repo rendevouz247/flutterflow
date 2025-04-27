@@ -164,6 +164,11 @@ def handle_ia():
 
     app.logger.info(f"📩 Requisição recebida: {data}")
 
+    # 🔥 IMPORTANTE 🔥
+    nova_data = None
+    nova_hora = None
+
+    
     if not user_id or not mensagem or not agendamento_id:
         return {"erro": "Dados incompletos"}, 400
 
