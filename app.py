@@ -194,7 +194,7 @@ def handle_ia():
     # 2) Confirmação positiva
     elif mensagem in ["y", "yes", "sim", "oui"]:
         if dados.get("nova_data") and dados.get("nova_hora"):
-            d_obj = date.fromisoformat(dados["nova_data"])
+            d_obj = datetime.fromisoformat(dados["nova_data"]).date()
             t_str = dados["nova_hora"][0:5]
             resposta = random.choice(CONFIRM_TEMPLATES).format(date=fmt_data(d_obj), time=t_str)
             app.logger.info(f"♻️ Gravando confirmação: date={dados['nova_data']} horas={dados['nova_hora']}")
