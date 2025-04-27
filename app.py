@@ -200,7 +200,7 @@ def handle_ia():
             resposta = "Tranquilo! Qual outro dia e horário funcionam melhor pra você? 😉"
 
         elif mensagem == "r":
-            iif isinstance(nova_data, date):
+            if isinstance(nova_data, date):
                 nova_data = nova_data.isoformat()
             supabase.table("agendamentos").update({
                 "reagendando": True,
