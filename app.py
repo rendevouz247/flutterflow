@@ -43,11 +43,16 @@ def fmt_data(dt: date) -> str:
     return f"{dt.day} de {MESES_PT[dt.month]}"
 
 def extrair_data_hora(texto: str):
-    """Extrai data e hora do texto usando dateparser com DATE_ORDER='DMY'."""
+    """
+    Extrai data e hora do texto:
+    1) Tenta hora explícita via regex RE_HORA.
+    2) Tenta data via dateparser (DMY).
+    3) Fallback manual para padrões dd/mm ou dd/mm/aaaa.
+    """
     timezone = tz.gettz('America/Toronto')
     agora = datetime.now(tz=timezone)
 
-    # Extrair hora explícita
+    # 1) Extrair hora explícita
     match_hora = RE_HORA.search(texto)
     hora_encontrada = None
     if match_hora:
@@ -56,7 +61,7 @@ def extrair_data_hora(texto: str):
         except ValueError:
             app.logger.info(f"❌ Formato de hora inválido: {match_hora.group()}")
 
-    # Extrair data (com DMY e pt)
+    # 2) Tentar extrair data com dateparser (DMY)
     settings = {
         'PREFER_DATES_FROM': 'future',
         'RELATIVE_BASE': agora,
@@ -64,17 +69,34 @@ def extrair_data_hora(texto: str):
         'RETURN_AS_TIMEZONE_AWARE': False,
         'DATE_ORDER': 'DMY'
     }
-    resultados = search_dates(texto, languages=['pt'], settings=settings)
-
+    resultados = search_dates(texto, languages=['pt'], settings=settings) or []
     data_encontrada = None
-    if resultados:
-        for txt, dt in resultados:
-            if not RE_HORA.fullmatch(txt):
-                data_encontrada = dt.date()
-                break
+    for txt, dt in resultados:
+        if not RE_HORA.fullmatch(txt):
+            data_encontrada = dt.date()
+            break
+
+    # 3) Fallback manual para dd/mm (com ou sem ano)
+    if not data_encontrada:
+        m = RE_DATA.search(texto)
+        if m:
+            day_str, month_str, _, year_str = m.groups()
+            day = int(day_str)
+            month = int(month_str)
+            # se não veio ano, assume o ano atual ou próximo se já passou
+            yr = int(year_str) if year_str else agora.year
+            if not year_str:
+                tentativa = date(agora.year, month, day)
+                if tentativa < agora.date():
+                    yr += 1
+            try:
+                data_encontrada = date(yr, month, day)
+            except ValueError:
+                app.logger.info(f"❌ Data inválida no fallback: {day}/{month}/{yr}")
 
     app.logger.info(f"🔎 extrair_data_hora -> data: {data_encontrada}, hora: {hora_encontrada}")
     return data_encontrada, hora_encontrada
+
 
 
 def gravar_mensagem_chat(user_id, mensagem, agendamento_id, tipo="IA"):
