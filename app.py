@@ -1,7 +1,6 @@
 from flask import Flask, request
 import os, logging, re, random
 from datetime import datetime, timedelta, date
-dateparser  # noqa: F401
 from dateparser.search import search_dates
 from supabase import create_client
 from groq import Groq
