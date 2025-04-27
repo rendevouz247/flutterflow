@@ -1,6 +1,6 @@
 from flask import Flask, request
 import os, logging, re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import dateparser
 from dateparser.search import search_dates
 from supabase import create_client
