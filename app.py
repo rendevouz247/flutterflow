@@ -218,16 +218,17 @@ def handle_ia():
                     nova_data = dados["nova_data"][:10]
                     app.logger.info(f"♻️ Usando nova_data gravada anteriormente: {nova_data}")
 
-            if nova_data and nova_hora:
+           if nova_data and nova_hora:
                 disponibilidade = consultar_disponibilidade(dados["company_id"], dados["atend_id"], nova_data)
                 disponiveis = disponibilidade.get("horas_disponiveis", {}).get("disponiveis", [])
             
                 if not disponiveis:
+                    # ✅ Nenhuma disponibilidade: só gravar a nova_data (sem nova_hora)
                     supabase.table("agendamentos").update({
                         "nova_data": nova_data,
                         "nova_hora": None
                     }).eq("cod_id", int(agendamento_id)).execute()
-                    app.logger.info(f"⚠️ Gravado nova_data {nova_data} (sem hora ainda) no agendamento.")
+                    app.logger.info(f"♻️ Gravado nova_data {nova_data} (sem hora) no agendamento.")
             
                     resposta = (
                         f"⚠️ Infelizmente não há horários disponíveis para o dia {nova_data}.\n"
@@ -235,10 +236,11 @@ def handle_ia():
                     )
             
                 else:
-                    hora_cliente = nova_hora.strftime("%H:%M") if hasattr(nova_hora, 'strftime') else str(nova_hora)[:5]
-                    match_hora = next((h for h in disponiveis if hora_cliente in h or h.startswith(hora_cliente)), None)
+                    # Verifica se a hora desejada existe nos horários disponíveis
+                    match_hora = next((h for h in disponiveis if nova_hora[:5] in h or h.startswith(nova_hora[:5])), None)
             
                     if match_hora:
+                        # ✅ Hora disponível: grava a nova_data e nova_hora
                         supabase.table("agendamentos").update({
                             "nova_data": nova_data,
                             "nova_hora": match_hora
@@ -248,19 +250,19 @@ def handle_ia():
                         resposta = f"🔐 Posso confirmar sua remarcação para o dia {nova_data} às {match_hora}? Responda com *sim* ou *não*."
             
                     else:
+                        # ⚠️ Hora desejada não disponível: gravar nova_data mas sem hora
                         supabase.table("agendamentos").update({
                             "nova_data": nova_data,
                             "nova_hora": None
                         }).eq("cod_id", int(agendamento_id)).execute()
-                        app.logger.info(f"♻️ Gravado nova_data {nova_data} após horário não disponível.")
+                        app.logger.info(f"♻️ Gravado nova_data {nova_data} (sem hora após horário indisponível) no agendamento.")
             
                         sugestoes = disponiveis[:3]
                         sugestoes_texto = "\n".join([f"🔹 {h}" for h in sugestoes]) or "Nenhum horário disponível."
                         resposta = (
-                            f"😕 O horário {hora_cliente} no dia {nova_data} não está disponível.\n"
+                            f"😕 O horário {nova_hora[:5]} no dia {nova_data} não está disponível.\n"
                             f"Aqui estão outras opções:\n{sugestoes_texto}"
                         )
-
 
             elif nova_data:
                 # Atualiza nova_data mesmo sem hora
