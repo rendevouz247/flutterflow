@@ -15,6 +15,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 groq_client = Groq(api_key=GROQ_API_KEY)
 
+
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 app.logger.info("🏁 IA rodando e aguardando requisições...")
