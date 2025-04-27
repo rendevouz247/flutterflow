@@ -42,6 +42,13 @@ def normalizar_texto(texto):
         data_formatada = hoje.strftime("%d/%m/%Y")
         texto = texto.replace("hoje", data_formatada)
 
+    # 🎯 Novo: corrigir datas sem ano (ex: 28/05 ➔ 28/05/2025)
+    texto = re.sub(
+        r"\b(\d{2})/(\d{2})\b",
+        lambda m: f"{m.group(1)}/{m.group(2)}/{agora.year}",
+        texto
+    )
+
     return texto
 
 def extrair_data_hora(texto):
