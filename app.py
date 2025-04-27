@@ -20,6 +20,7 @@ app.logger.info("🏁 IA rodando e aguardando requisições...")
 
 # ==== CONSTS PRECOMPILADAS ====  
 RE_HORA = re.compile(r"\b(\d{1,2}):(\d{2})\b")
+RE_DATA = re.compile(r"\b(\d{1,2})/(\d{1,2})(/(\d{2,4}))?\b")
 MESES_PT = [None, "janeiro", "fevereiro", "março", "abril", "maio", "junho",
            "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
 
