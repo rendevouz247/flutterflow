@@ -42,10 +42,10 @@ def normalizar_texto(texto):
         data_formatada = hoje.strftime("%d/%m/%Y")
         texto = texto.replace("hoje", data_formatada)
 
-    # 🎯 Novo: corrigir datas sem ano (ex: 28/05 ➔ 28/05/2025)
+    # 🛠️ CORREÇÃO NOVA: adicionar o ano 2025 se cliente mandar "29/05" sem ano
     texto = re.sub(
-        r"\b(\d{2})/(\d{2})\b",
-        lambda m: f"{m.group(1)}/{m.group(2)}/{agora.year}",
+        r"\b(\d{2})/(\d{2})\b(?!/)",  # detecta dd/mm que não tem /ano
+        lambda m: f"{m.group(1)}/{m.group(2)}/2025",
         texto
     )
 
