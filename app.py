@@ -235,7 +235,6 @@ def handle_ia():
                     )
             
                 else:
-                    # Agora valida se a hora pedida existe nos disponíveis
                     hora_cliente = nova_hora.strftime("%H:%M") if isinstance(nova_hora, datetime.time) else str(nova_hora)[:5]
                     match_hora = next((h for h in disponiveis if hora_cliente in h or h.startswith(hora_cliente)), None)
             
@@ -261,7 +260,6 @@ def handle_ia():
                             f"😕 O horário {hora_cliente} no dia {nova_data} não está disponível.\n"
                             f"Aqui estão outras opções:\n{sugestoes_texto}"
                         )
-
 
             elif nova_data:
                 # Atualiza nova_data mesmo sem hora
