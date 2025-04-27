@@ -64,7 +64,7 @@ def extrair_data_hora(texto):
             data_manual = f"{ano}-{mes}-{dia}"
             app.logger.info(f"📅 Data manual identificada: {data_manual}")
 
-            hora_match = re.search(r"(\d{1,2})\s?(?:h|hs|:)?(\d{0,2})", texto)
+            hora_match = re.search(r"(?:(?:às?|as)?\s*)(\d{1,2})(?::(\d{2}))?", texto)
             if hora_match:
                 hora = hora_match.group(1).zfill(2)
                 minuto = hora_match.group(2).zfill(2) if hora_match.group(2) else "00"
