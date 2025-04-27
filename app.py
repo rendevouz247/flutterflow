@@ -23,23 +23,25 @@ app.logger.info("🏁 IA rodando e aguardando requisições...")
 # ==== FUNÇÕES UTILITÁRIAS ====
 
 def normalizar_texto(texto):
-    """Corrige expressões humanas como 'depois de amanhã', 'próxima sexta', etc."""
-    hoje = datetime.now().date()
-    substituicoes = {
-        "depois de amanhã": (hoje + timedelta(days=2)).isoformat(),
-        "amanhã": (hoje + timedelta(days=1)).isoformat(),
-        "hoje": hoje.isoformat(),
-        "semana que vem": (hoje + timedelta(days=7)).isoformat(),
-        "daqui a três dias": (hoje + timedelta(days=3)).isoformat(),
-        "daqui a tres dias": (hoje + timedelta(days=3)).isoformat(),  # erro comum (sem acento)
-        "daqui a dois dias": (hoje + timedelta(days=2)).isoformat(),
-        "próxima sexta": (hoje + timedelta((4 - hoje.weekday() + 7) % 7)).isoformat(),  # sexta-feira
-        "sexta que vem": (hoje + timedelta((4 - hoje.weekday() + 7) % 7)).isoformat(),
-        "próximo sábado": (hoje + timedelta((5 - hoje.weekday() + 7) % 7)).isoformat(),
-        "sábado que vem": (hoje + timedelta((5 - hoje.weekday() + 7) % 7)).isoformat(),
-    }
-    for chave, valor in substituicoes.items():
-        texto = re.sub(rf'\b{chave}\b', valor, texto, flags=re.IGNORECASE)
+    texto = texto.lower()
+    timezone = tz.gettz('America/Toronto')
+    agora = datetime.now(tz=timezone)
+
+    if "depois de amanhã" in texto:
+        dois_dias = agora + timedelta(days=2)
+        data_formatada = dois_dias.strftime("%d/%m/%Y")
+        texto = texto.replace("depois de amanhã", data_formatada)
+
+    if "amanhã" in texto and "depois de amanhã" not in texto:
+        amanha = agora + timedelta(days=1)
+        data_formatada = amanha.strftime("%d/%m/%Y")
+        texto = texto.replace("amanhã", data_formatada)
+
+    if "hoje" in texto:
+        hoje = agora
+        data_formatada = hoje.strftime("%d/%m/%Y")
+        texto = texto.replace("hoje", data_formatada)
+
     return texto
 
 def extrair_data_hora(texto):
@@ -54,36 +56,41 @@ def extrair_data_hora(texto):
         resultado = search_dates(
             texto,
             languages=["pt", "en", "fr"],
-            settings={
-                "PREFER_DATES_FROM": "future"
-            }
+            settings={"PREFER_DATES_FROM": "future"}
         )
 
         if not resultado:
             app.logger.warning("⚠️ Nenhuma data encontrada.")
             return None, None
 
-        # 📅 Forçar a timezone de Montreal
-        timezone_toronto = tz.gettz('America/Toronto')
-        data_detectada = resultado[0][1].astimezone(timezone_toronto).date().isoformat()
-        app.logger.info(f"📆 Data ajustada para Montreal: {data_detectada}")
+        data_detectada = resultado[0][1]
 
-        # ⚡ Pegamos a hora manualmente do texto via regex
+        # Corrige timezone para Montreal
+        timezone_toronto = tz.gettz('America/Toronto')
+        data_detectada = data_detectada.astimezone(timezone_toronto)
+
+        # Corrige ano se necessário
+        if data_detectada.year < 2025:
+            data_detectada = data_detectada.replace(year=2025)
+
+        data_final = data_detectada.date().isoformat()
+        app.logger.info(f"📆 Data final: {data_final}")
+
+        # Extrai a hora manualmente
         hora_match = re.search(r"\b(\d{1,2})[:hH](\d{2})\b", texto)
         if hora_match:
             hora = hora_match.group(1).zfill(2)
             minuto = hora_match.group(2).zfill(2)
             hora_formatada = f"{hora}:{minuto}:01"
             app.logger.info(f"⏰ Hora identificada: {hora_formatada}")
-            return data_detectada, hora_formatada
+            return data_final, hora_formatada
 
         app.logger.warning("⚠️ Nenhuma hora encontrada no texto.")
-        return data_detectada, None
+        return data_final, None
 
     except Exception as e:
         app.logger.error(f"❌ Erro em extrair_data_hora: {e}")
         return None, None
-
 
 def gravar_mensagem_chat(user_id, mensagem, agendamento_id, tipo="IA"):
     """Grava uma mensagem no chat."""
