@@ -218,7 +218,7 @@ def handle_ia():
                     nova_data = dados["nova_data"][:10]
                     app.logger.info(f"♻️ Usando nova_data gravada anteriormente: {nova_data}")
 
-           if nova_data and nova_hora:
+            if nova_data and nova_hora:
                 disponibilidade = consultar_disponibilidade(dados["company_id"], dados["atend_id"], nova_data)
                 disponiveis = disponibilidade.get("horas_disponiveis", {}).get("disponiveis", [])
             
@@ -263,6 +263,7 @@ def handle_ia():
                             f"😕 O horário {nova_hora[:5]} no dia {nova_data} não está disponível.\n"
                             f"Aqui estão outras opções:\n{sugestoes_texto}"
                         )
+
 
             elif nova_data:
                 # Atualiza nova_data mesmo sem hora
