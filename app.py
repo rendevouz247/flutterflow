@@ -226,7 +226,7 @@ def handle_ia():
             resposta = tpl.format(date=date_str)
 
     # 2) Confirmação positiva
-    elif mensagem in ["y", "yes", "sim", "oui"]:
+    elif mensagem in ["y", "yes", "sim", "oui", "ok", "claro", "s", "pode"]:
         if dados.get("nova_data") and dados.get("nova_hora"):
             d_obj = datetime.fromisoformat(dados["nova_data"]).date()
             t_str = dados["nova_hora"][0:5]
@@ -273,11 +273,23 @@ def handle_ia():
                 tpl = random.choice(NO_SLOTS_TEMPLATES)
                 resposta = tpl.format(date=fmt_data(nova_data)) + " Por favor, escolha outro horário."
         elif nova_data:
-            app.logger.info(f"♻️ Gravando apenas nova_data {nova_data} (sem hora) no agendamento.")
-            supabase.table("agendamentos").update({"nova_data": nova_data.isoformat(), "nova_hora": None}) \
-                .eq("cod_id", int(agendamento_id)).execute()
-            tpl = ASK_TIME_TEMPLATES[0]
-            resposta = tpl.format(date=fmt_data(nova_data))
+               # 1) Carrega disponibilidade para essa data
+               disponiveis = consultar_disponibilidade(
+                   dados["company_id"],
+                   dados["atend_id"],
+                   nova_data.isoformat()
+               ).get("horas_disponiveis", {}).get("disponiveis", [])
+           
+               if disponiveis:
+                   # 2) Lista os horários disponíveis (HH:MM)
+                   resposta = "Tenho vagas nestes horários:\n" + "\n".join(f"– {h[:5]}" for h in disponiveis)
+               else:
+                   # 3) Se realmente não houver, avisa sem slots
+                   tpl = random.choice(NO_SLOTS_TEMPLATES)
+                   resposta = tpl.format(date=fmt_data(nova_data))
+           
+               app.logger.info(f"💬 Listando slots para {nova_data}: {disponiveis}")
+
         else:
             app.logger.info("💬 Fallback IA acionado")
             historico = supabase.table("mensagens_chat") \
