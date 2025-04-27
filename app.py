@@ -221,27 +221,28 @@ def handle_ia():
             if nova_data and nova_hora:
                 disponibilidade = consultar_disponibilidade(dados["company_id"], dados["atend_id"], nova_data)
                 disponiveis = disponibilidade.get("horas_disponiveis", {}).get("disponiveis", [])
-
+            
                 if not disponiveis:
                     supabase.table("agendamentos").update({
                         "nova_data": nova_data,
                         "nova_hora": None
                     }).eq("cod_id", int(agendamento_id)).execute()
                     app.logger.info(f"♻️ Gravado nova_data {nova_data} (sem hora ainda) no agendamento.")
-
+            
                     resposta = (
                         f"⚠️ Infelizmente não há horários disponíveis para o dia {nova_data}.\n"
                         f"Por favor, envie outra data e horário para que eu possa verificar."
                     )
+            
                 else:
-                    match_hora = next((h for h in disponiveis if nova_hora[:5] in h or h.startswith(nova_hora[:5])), None)
+                    match_hora = next((h for h in disponiveis if nova_hora.strftime("%H:%M") in h or h.startswith(nova_hora.strftime("%H:%M"))), None)
                     if match_hora:
                         supabase.table("agendamentos").update({
                             "nova_data": nova_data,
                             "nova_hora": match_hora
                         }).eq("cod_id", int(agendamento_id)).execute()
                         app.logger.info(f"📝 Gravado nova_data {nova_data} e nova_hora {match_hora} no agendamento.")
-
+            
                         resposta = f"🔐 Posso confirmar sua remarcação para o dia {nova_data} às {match_hora}? Responda com *sim* ou *não*."
                     else:
                         supabase.table("agendamentos").update({
@@ -249,13 +250,14 @@ def handle_ia():
                             "nova_hora": None
                         }).eq("cod_id", int(agendamento_id)).execute()
                         app.logger.info(f"♻️ Gravado nova_data {nova_data} após horário não disponível.")
-
+            
                         sugestoes = disponiveis[:3]
                         sugestoes_texto = "\n".join([f"🔹 {h}" for h in sugestoes]) or "Nenhum horário disponível."
                         resposta = (
-                            f"😕 O horário {nova_hora} no dia {nova_data} não está disponível.\n"
+                            f"😕 O horário {nova_hora.strftime('%H:%M')} no dia {nova_data} não está disponível.\n"
                             f"Aqui estão outras opções:\n{sugestoes_texto}"
                         )
+
 
             elif nova_data:
                 # Atualiza nova_data mesmo sem hora
