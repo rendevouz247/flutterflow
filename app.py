@@ -43,7 +43,6 @@ def fmt_data(dt: date) -> str:
     """Formata data para '29 de maio'"""
     return f"{dt.day} de {MESES_PT[dt.month]}"
 
-
 def extrair_data_hora(texto: str):
     """Extrai data e hora do texto usando dateparser com DATE_ORDER='DMY'."""
     timezone = tz.gettz('America/Toronto')
