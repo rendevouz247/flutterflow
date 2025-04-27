@@ -177,7 +177,7 @@ def handle_ia():
         if mensagem in ["y", "yes", "sim", "oui"]:
             dados = buscar_agendamento(agendamento_id)
             if dados and dados.get("nova_data") and dados.get("nova_hora"):
-                if isinstance(nova_data, datetime.date):
+                if isinstance(nova_data, date):
                     nova_data = nova_data.isoformat()
                 supabase.table("agendamentos").update({
                     "date": dados["nova_data"],
@@ -191,7 +191,7 @@ def handle_ia():
                 resposta = "Hmm... não encontrei uma sugestão de horário. Pode me dizer novamente qual dia e hora você quer?"
 
         elif mensagem in ["n", "não", "no", "non"]:
-            if isinstance(nova_data, datetime.date):
+            if isinstance(nova_data, date):
                 nova_data = nova_data.isoformat()
             supabase.table("agendamentos").update({
                 "nova_data": None,
@@ -200,7 +200,7 @@ def handle_ia():
             resposta = "Tranquilo! Qual outro dia e horário funcionam melhor pra você? 😉"
 
         elif mensagem == "r":
-            if isinstance(nova_data, datetime.date):
+            iif isinstance(nova_data, date):
                 nova_data = nova_data.isoformat()
             supabase.table("agendamentos").update({
                 "reagendando": True,
@@ -235,7 +235,7 @@ def handle_ia():
             
                 if not disponiveis:
                     # ✅ Nenhuma disponibilidade: só gravar a nova_data (sem nova_hora)
-                    if isinstance(nova_data, datetime.date):
+                    if isinstance(nova_data, date):
                         nova_data = nova_data.isoformat()
                     supabase.table("agendamentos").update({
                         "nova_data": nova_data,
@@ -254,7 +254,7 @@ def handle_ia():
             
                     if match_hora:
                         # ✅ Hora disponível: grava a nova_data e nova_hora
-                        if isinstance(nova_data, datetime.date):
+                        if isinstance(nova_data, date):
                             nova_data = nova_data.isoformat()
                         supabase.table("agendamentos").update({
                             "nova_data": nova_data,
@@ -266,7 +266,7 @@ def handle_ia():
             
                     else:
                         # ⚠️ Hora desejada não disponível: gravar nova_data mas sem hora
-                        if isinstance(nova_data, datetime.date):
+                        if isinstance(nova_data, date):
                             nova_data = nova_data.isoformat()
                         supabase.table("agendamentos").update({
                             "nova_data": nova_data,
@@ -284,7 +284,7 @@ def handle_ia():
 
             elif nova_data:
                 # Atualiza nova_data mesmo sem hora
-                if isinstance(nova_data, datetime.date):
+                if isinstance(nova_data, date):
                     nova_data = nova_data.isoformat()
                 supabase.table("agendamentos").update({
                     "nova_data": nova_data,
