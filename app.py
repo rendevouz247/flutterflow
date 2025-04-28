@@ -387,7 +387,7 @@ def handle_ia():
         # 9) Quando não for lembrete, nem reagendamento…
         else:
             # Se chat_ativo == False, bloqueia qualquer outra intenção
-            if not agendamento.get("chat_ativo"):
+            if not dados.get("chat_ativo"):
                 resposta = (
                     "No momento só posso ajudar com lembretes e reagendamentos. "
                     "Se quiser reagendar, digite 'r'."
