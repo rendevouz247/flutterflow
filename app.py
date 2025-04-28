@@ -47,11 +47,12 @@ ASK_TIME_TEMPLATES = [
 ]
 
 REMINDER_TEMPLATES = [
-    "Claro! No dia {date} vou te lembrar de agendar o banho do seu cachorro. 🐶",
-    "Combinado! Em {date}, você receberá um lembrete para marcar o banho do seu cãozinho.",
-    "Perfeito! Lembrarei você em {date} de agendar o banho do seu cachorro. 😉",
-    "Sem problemas! Te aviso em {date} para não esquecer o banho do seu cachorro."
+    "Claro! No dia {date} vou te lembrar de {task}.",
+    "Combinado! Em {date}, você receberá um lembrete para {task}.",
+    "Perfeito! Lembrarei você em {date} de {task}. 😉",
+    "Sem problemas! Te aviso em {date} para não esquecer de {task}."
 ]
+
 
 
 # ==== FUNÇÕES AUXILIARES ====  
@@ -279,8 +280,11 @@ def handle_ia():
                 resposta = "Ops, não consegui salvar seu lembrete. Tenta de novo?"
             else:
                 tpl = random.choice(REMINDER_TEMPLATES)
-                resposta = tpl.format(date=date_dt.strftime('%d/%m/%Y'))
-    
+                resposta = tpl.format(
+                    date=date_dt.strftime('%d/%m/%Y'),
+                    task=reminder_msg
+                )
+                    
             gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
             return {"resposta": resposta}, 200
            
@@ -380,30 +384,39 @@ def handle_ia():
                 resposta = tpl.format(date=fmt_data(nova_data))
             app.logger.info(f"💬 Listando slots para {nova_data}: {disponiveis}")
 
-        # 9) Fallback para IA
-        else:
-            historico = supabase.table("mensagens_chat") \
-                .select("mensagem,tipo") \
-                .eq("agendamento_id", int(agendamento_id)) \
-                .order("data_envio", desc=False).limit(10).execute().data
-            msgs = [
-                {"role": "assistant" if m['tipo']=='IA' else 'user', "content": m['mensagem']}
-                for m in historico
-            ]
-            msgs.append({"role": "user", "content": mensagem})
-            msgs.insert(0, {
-                "role": "system",
-                "content": "Você é uma atendente virtual simpática. Nunca confirme horários sem o cliente for sim."
-            })
-            resposta = gerar_resposta_ia(msgs)
-            app.logger.info("💬 Fallback IA acionado")
-
-    # 10) Grava a resposta e retorna
-    gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
-    app.logger.info(f"💬 Resposta final: {resposta}")
-    return {"resposta": resposta}, 200
+            # 9) Quando não for lembrete, nem reagendamento…
+            else:
+                # Se chat_ativo == False, bloqueia qualquer outra intenção
+                if not agendamento.get("chat_ativo"):
+                    resposta = (
+                        "No momento só posso ajudar com lembretes e reagendamentos. "
+                        "Se quiser reagendar, digite 'r'."
+                    )
+                    app.logger.info("🚫 Bloqueado fallback IA pois chat_ativo=False")
+                    gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
+                    return {"resposta": resposta}, 200
+        
+                # 10) Se estivermos em reagendamento (chat_ativo == True), cai no LLM
+                historico = supabase.table("mensagens_chat") \
+                    .select("mensagem,tipo") \
+                    .eq("agendamento_id", int(agendamento_id)) \
+                    .order("data_envio", desc=False).limit(10).execute().data
+                msgs = [
+                    {"role": "assistant" if m['tipo']=='IA' else 'user', "content": m['mensagem']}
+                    for m in historico
+                ]
+                msgs.append({"role": "user", "content": mensagem})
+                msgs.insert(0, {
+                    "role": "system",
+                    "content": "Você é uma atendente virtual simpática. Nunca confirme horários sem o cliente for sim."
+                })
+                resposta = gerar_resposta_ia(msgs)
+                app.logger.info("💬 Fallback IA para reagendamento em curso")
+        
+            # 11) Grava e retorna
+            gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
+            return {"resposta": resposta}, 200
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-
