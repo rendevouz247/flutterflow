@@ -321,17 +321,29 @@ def handle_ia():
 
     # 3) Confirmação positiva (inclui “ok”)
     elif mensagem in ["y", "yes", "sim", "oui", "ok"]:
+        # Formata data e hora
         d_obj = datetime.fromisoformat(dados["nova_data"]).date()
         t_str = dados["nova_hora"][:5]
         resposta = random.choice(CONFIRM_TEMPLATES).format(date=fmt_data(d_obj), time=t_str)
+        
+        # Atualiza agendamento e fecha o chat
         supabase.table("agendamentos").update({
-            "date": dados["nova_data"],
-            "horas": dados["nova_hora"],
-            "status": "Reagendado",
+            "date":    dados["nova_data"],
+            "horas":   dados["nova_hora"],
+            "status":  "Reagendado",
             "reagendando": False,
-            "chat_ativo": False
+            "chat_ativo":  False
         }).eq("cod_id", int(agendamento_id)).execute()
-        app.logger.info(f"♻️ Gravação da confirmação no banco")
+        app.logger.info(f"♻️ Gravação da confirmação no banco (chat encerrado)")
+        
+        # Grava no chat e retorna a resposta imediatamente
+        gravar_mensagem_chat(
+            user_id="ia",
+            mensagem=resposta,
+            agendamento_id=agendamento_id
+        )
+        return {"resposta": resposta}, 200
+
 
     # 4) Confirmação negativa
     elif mensagem in ["n", "não", "no", "non"]:
