@@ -343,14 +343,25 @@ def handle_ia():
         app.logger.info(f"♻️ Reset slots no agendamento {agendamento_id}")
 
     # 5) Iniciar reagendamento
-    elif mensagem == "r":
-        resposta = "Claro! Qual dia é melhor pra você?"
+    elif mensagem.strip().lower() == "r":
+        resposta = "Claro! Qual dia funciona melhor para marcarmos?"
+        # Marca no banco que o chat está ativo e zera novas datas e horas
         supabase.table("agendamentos").update({
             "reagendando": True,
             "nova_data": None,
-            "nova_hora": None
+            "nova_hora": None,
+            "chat_ativo": True
         }).eq("cod_id", int(agendamento_id)).execute()
         app.logger.info(f"♻️ Iniciando reagendamento no agendamento {agendamento_id}")
+
+        # Grava a resposta e retorna logo em seguida
+        gravar_mensagem_chat(
+            user_id="ia",
+            mensagem=resposta,
+            agendamento_id=agendamento_id
+        )
+        return {"resposta": resposta}, 200
+
 
     # 6) Processamento de data/hora informada
     else:
