@@ -6,6 +6,12 @@ from supabase import create_client
 from groq import Groq
 from dateutil import tz
 
+@app.route("/ping", methods=["GET"])
+def ping():
+    print("🏓 PING RECEBIDO")           # sempre aparece no stdout
+    app.logger.info("🏓 PING RECEBIDO")  # e nos logs
+    return "pong", 200
+
 # ==== CONFIGURAÇÃO ====  
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
