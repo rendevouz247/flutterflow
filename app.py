@@ -403,7 +403,7 @@ def handle_ia():
             if not dados.get("chat_ativo"):
                 resposta = (
                     "No momento só posso ajudar com lembretes e reagendamentos. "
-                    "Se quiser reagendar, digite 'r'."
+                    "Alterar agendamento, somente 3 dias antes da data agendada. Se quiser pode ir na Home e cancelar seu agendamento e fazer outro."
                 )
                 app.logger.info("🚫 Bloqueado fallback IA pois chat_ativo=False")
                 gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
