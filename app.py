@@ -240,20 +240,25 @@ def handle_ia():
         return {"erro": "Dados incompletos"}, 400
 
     # ─── OVERRIDE DE LEMBRETES ──────────────────────────────────────
-    # Se a mensagem contiver “lembra” ou “avisa”, processa como lembrete sempre
-
-    app.logger.info("✅ Entrou no override de lembretes! dates=%s", dates)
-    if any(kw in mensagem for kw in ["lembra", "avisa", "lembrar", "avisar", "lembrete"]):
-        app.logger.info("🔍 Mensagem recebida para override de lembrete: %s", mensagem)
+    if any(kw in mensagem for kw in ["lembra", "avisa"]):
+        app.logger.info("🔎 Override detectado; tentando extrair datas...")
+        # 1) Extrai as datas
         dates = search_dates(mensagem, languages=["pt"])
+        app.logger.info("✅ Datas encontradas: %s", dates)
+    
+        # 2) Só agora faz o log de “entrou” e processa
         if dates:
+            app.logger.info("✅ Entrou no override de lembretes com date_str=%s", dates[0][0])
             date_str, date_dt = dates[0]
             reminder_msg = mensagem.replace(date_str, "").strip() or "Lembrete personalizado"
+    
             res = supabase.table("user_reminders").insert({
                 "user_id":  user_id,
                 "due_date": date_dt.isoformat(),
                 "message":  reminder_msg
             }).execute()
+            app.logger.info("📤 Resultado do insert em user_reminders: %s", res)
+    
             if res.error:
                 resposta = "Ops, não consegui salvar seu lembrete. Tenta de novo?"
             else:
@@ -261,9 +266,10 @@ def handle_ia():
                     f"Beleza! Vou te lembrar em {date_dt.strftime('%d/%m/%Y')} "
                     f"sobre “{reminder_msg}”."
                 )
-            # grava no chat e retorna ali mesmo
+    
             gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
             return {"resposta": resposta}, 200
+
            
     # 1) Busca agendamento atual
     dados = buscar_agendamento(agendamento_id)
