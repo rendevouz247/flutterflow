@@ -6,3 +6,4 @@ httpx>=0.24.1
 deep-translator
 groq
 dateparser
+Flask-Cors
