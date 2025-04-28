@@ -174,9 +174,9 @@ def gravar_mensagem_chat(user_id, mensagem, agendamento_id, tipo="IA"):
 def buscar_agendamento(cod_id):
     try:
         res = supabase.table("agendamentos") \
-            .select("nova_data, nova_hora, company_id, atend_id") \
+            .select("nova_data, nova_hora, company_id, atend_id, chat_ativo") \
             .eq("cod_id", int(cod_id)) \
-            .single().execute()
+            .maybe_single().execute()
         dados = res.data or {}
         app.logger.info(f"🔍 Dados do agendamento: {dados}")
         return dados
@@ -232,6 +232,29 @@ def handle_ia():
     if not user_id or not mensagem or not agendamento_id:
         return {"erro": "Dados incompletos"}, 400
 
+    # 0) Bloco de lembretes: só se não houver chat ativo
+    agendamento = buscar_agendamento(agendamento_id)
+    if not agendamento.get("chat_ativo"):
+        # tenta extrair data+hora na mensagem
+        dates = search_dates(mensagem, languages=["pt"])
+        if dates:
+            date_str, date_dt = dates[0]
+            reminder_msg = mensagem.replace(date_str, "").strip() or "Lembrete personalizado"
+            res = supabase.table("user_reminders").insert({
+                "user_id":  user_id,
+                "due_date": date_dt.isoformat(),
+                "message": reminder_msg
+            }).execute()
+            if res.error:
+                resposta = "Ops, não consegui salvar seu lembrete. Tenta de novo?"
+            else:
+                resposta = (
+                    f"Beleza! Vou te lembrar em {date_dt.strftime('%d/%m/%Y')} "
+                    f"sobre “{reminder_msg}”."
+                )
+            gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
+            return {"resposta": resposta}, 200
+           
     # 1) Busca agendamento atual
     dados = buscar_agendamento(agendamento_id)
     nova_data = None
