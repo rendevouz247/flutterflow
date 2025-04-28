@@ -53,8 +53,6 @@ REMINDER_TEMPLATES = [
     "Sem problemas! Te aviso em {date} para não esquecer de {task}."
 ]
 
-
-
 # ==== FUNÇÕES AUXILIARES ====  
 
 def fmt_data(dt: date) -> str:
@@ -255,38 +253,49 @@ def handle_ia():
     if not user_id or not mensagem or not agendamento_id:
         return {"erro": "Dados incompletos"}, 400
 
-    # ─── OVERRIDE DE LEMBRETES ──────────────────────────────────────
 
+    # ─── OVERRIDE DE LEMBRETES ──────────────────────────────────────
     if any(kw in mensagem for kw in ["lembra", "avisa"]):
-        app.logger.info("🔎 Override detectado; tentando extrair datas...")
+        # 1) Extrai data
         dates = search_dates(mensagem, languages=["pt"])
-        app.logger.info("✅ Datas encontradas: %s", dates)
-    
         if dates:
             date_str, date_dt = dates[0]
-            reminder_msg = mensagem.replace(date_str, "").strip() or "Lembrete personalizado"
     
-            # chama o insert
-            res = supabase.table("user_reminders") \
-                         .insert({
-                           "user_id":  user_id,
-                           "due_date": date_dt.isoformat(),
-                           "message":  reminder_msg
-                         }).execute()
-            app.logger.info("📤 Resultado do insert em user_reminders: %s", res)
+            # 2) Remove a data da mensagem
+            text_wo_date = re.sub(re.escape(date_str), "", mensagem, flags=re.IGNORECASE)
     
-            # substitua a checagem de res.error por status_code
-            if getattr(res, "status_code", 200) >= 400:
-                resposta = "Ops, não consegui salvar seu lembrete. Tenta de novo?"
-            else:
-                tpl = random.choice(REMINDER_TEMPLATES)
-                resposta = tpl.format(
-                    date=date_dt.strftime('%d/%m/%Y'),
-                    task=reminder_msg
-                )
-                    
+            # 3) Remove palavras de gatilho e preposições comuns
+            reminder_msg = re.sub(
+                r"\b(me lembra( me)?|avisa( me)?|lembra de|lembra)\b", 
+                "", 
+                text_wo_date,
+                flags=re.IGNORECASE
+            )
+            # 4) Remove “dia”, “em”, “para” e pontuações soltas
+            reminder_msg = re.sub(r"\b(dia|em|para)\b", "", reminder_msg, flags=re.IGNORECASE)
+            reminder_msg = reminder_msg.replace("?", "").strip()
+    
+            # 5) Se ficar vazio, define mensagem genérica
+            if not reminder_msg:
+                reminder_msg = "seu lembrete"
+    
+            # 6) Grava no banco
+            res = supabase.table("user_reminders").insert({
+                "user_id":  user_id,
+                "due_date": date_dt.isoformat(),
+                "message":  reminder_msg
+            }).execute()
+    
+            # 7) Monta resposta usando template genérico
+            tpl = random.choice(REMINDER_TEMPLATES)
+            resposta = tpl.format(
+                date=date_dt.strftime("%d/%m/%Y"),
+                task=reminder_msg
+            )
+    
             gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
             return {"resposta": resposta}, 200
+
            
     # 1) Busca agendamento atual
     dados = buscar_agendamento(agendamento_id)
