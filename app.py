@@ -223,18 +223,22 @@ def gerar_resposta_ia(mensagens):
 @app.route("/ia", methods=["POST"])
 def handle_ia():
     data = request.get_json() or {}
+    app.logger.info("🚀 handle_ia chamado com payload: %s", data)
     user_id = data.get("user_id")
     mensagem = data.get("mensagem", "").strip().lower()
     agendamento_id = data.get("agendamento_id")
 
-    app.logger.info(f"📩 Requisição: {data}")
+    app.logger.info("🔍 Mensagem recebida para override de lembrete: %s", mensagem)
 
     if not user_id or not mensagem or not agendamento_id:
         return {"erro": "Dados incompletos"}, 400
 
     # ─── OVERRIDE DE LEMBRETES ──────────────────────────────────────
     # Se a mensagem contiver “lembra” ou “avisa”, processa como lembrete sempre
+
+    app.logger.info("✅ Entrou no override de lembretes! dates=%s", dates)
     if any(kw in mensagem for kw in ["lembra", "avisa", "lembrar", "avisar", "lembrete"]):
+        app.logger.info("🔍 Mensagem recebida para override de lembrete: %s", mensagem)
         dates = search_dates(mensagem, languages=["pt"])
         if dates:
             date_str, date_dt = dates[0]
