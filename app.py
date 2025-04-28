@@ -234,7 +234,7 @@ def handle_ia():
 
     # ─── OVERRIDE DE LEMBRETES ──────────────────────────────────────
     # Se a mensagem contiver “lembra” ou “avisa”, processa como lembrete sempre
-    if any(kw in mensagem for kw in ["lembra", "avisa"]):
+    if any(kw in mensagem for kw in ["lembra", "avisa", "lembrar", "avisar", "lembrete"]):
         dates = search_dates(mensagem, languages=["pt"])
         if dates:
             date_str, date_dt = dates[0]
