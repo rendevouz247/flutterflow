@@ -232,10 +232,9 @@ def handle_ia():
     if not user_id or not mensagem or not agendamento_id:
         return {"erro": "Dados incompletos"}, 400
 
-    # 0) Bloco de lembretes: só se não houver chat ativo
-    agendamento = buscar_agendamento(agendamento_id)
-    if not agendamento.get("chat_ativo"):
-        # tenta extrair data+hora na mensagem
+    # ─── OVERRIDE DE LEMBRETES ──────────────────────────────────────
+    # Se a mensagem contiver “lembra” ou “avisa”, processa como lembrete sempre
+    if any(kw in mensagem for kw in ["lembra", "avisa"]):
         dates = search_dates(mensagem, languages=["pt"])
         if dates:
             date_str, date_dt = dates[0]
@@ -243,7 +242,7 @@ def handle_ia():
             res = supabase.table("user_reminders").insert({
                 "user_id":  user_id,
                 "due_date": date_dt.isoformat(),
-                "message": reminder_msg
+                "message":  reminder_msg
             }).execute()
             if res.error:
                 resposta = "Ops, não consegui salvar seu lembrete. Tenta de novo?"
@@ -252,6 +251,7 @@ def handle_ia():
                     f"Beleza! Vou te lembrar em {date_dt.strftime('%d/%m/%Y')} "
                     f"sobre “{reminder_msg}”."
                 )
+            # grava no chat e retorna ali mesmo
             gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
             return {"resposta": resposta}, 200
            
