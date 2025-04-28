@@ -174,15 +174,19 @@ def extrair_data_hora(texto: str):
 
 
 def gravar_mensagem_chat(user_id, mensagem, agendamento_id, tipo="IA"):
+    # Define o timezone de Toronto
+    timezone = tz.gettz('America/Toronto')
+    # Usa a hora local com microssegundos
+    agora = datetime.now(tz=timezone).isoformat()
     try:
         supabase.table("mensagens_chat").insert({
-            "user_id": user_id,
-            "mensagem": mensagem,
+            "user_id":        user_id,
+            "mensagem":       mensagem,
             "agendamento_id": agendamento_id,
-            "data_envio": datetime.utcnow().isoformat(),
-            "tipo": tipo
+            "data_envio":     agora,
+            "tipo":           tipo
         }).execute()
-        app.logger.info(f"💬 Mensagem gravada no chat: {mensagem}")
+        app.logger.info(f"💬 Mensagem gravada no chat: '{mensagem}' às {agora}")
     except Exception as e:
         app.logger.error(f"❌ Erro ao gravar chat: {e}")
 
