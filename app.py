@@ -6,12 +6,6 @@ from supabase import create_client
 from groq import Groq
 from dateutil import tz
 
-@app.route("/ping", methods=["GET"])
-def ping():
-    print("🏓 PING RECEBIDO")           # sempre aparece no stdout
-    app.logger.info("🏓 PING RECEBIDO")  # e nos logs
-    return "pong", 200
-
 # ==== CONFIGURAÇÃO ====  
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -23,6 +17,12 @@ groq_client = Groq(api_key=GROQ_API_KEY)
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 app.logger.info("🏁 IA rodando e aguardando requisições...")
+
+@app.route("/ping", methods=["GET"])
+def ping():
+    print("🏓 PING RECEBIDO")           # sempre aparece no stdout
+    app.logger.info("🏓 PING RECEBIDO")  # e nos logs
+    return "pong", 200
 
 # ==== CONSTS PRECOMPILADAS ====  
 RE_HORA = re.compile(r"\b(\d{1,2}):(\d{2})\b")
