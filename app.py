@@ -1,4 +1,5 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import os, logging, re, random
 from datetime import datetime, timedelta, date, time
 from dateparser.search import search_dates
@@ -16,6 +17,8 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 app = Flask(__name__)
+# Permite chamadas CORS ao endpoint /ia
+CORS(app, resources={r"/ia": {"origins": "*"}})
 app.logger.setLevel(logging.INFO)
 app.logger.info("🏁 IA rodando e aguardando requisições...")
 
@@ -229,7 +232,11 @@ def gerar_resposta_ia(mensagens):
 # ==== ROTA PRINCIPAL ====  
 @app.route("/ia", methods=["POST"])
 def handle_ia():
-    data = request.get_json() or {}
+    # Responde ao preflight CORS
+    if request.method == "OPTIONS":
+        return "", 200
+    
+    data = request.get_json(force=True) or {}
     app.logger.info("🚀 handle_ia chamado com payload: %s", data)
     user_id = data.get("user_id")
     mensagem = data.get("mensagem", "").strip().lower()
