@@ -240,26 +240,27 @@ def handle_ia():
         return {"erro": "Dados incompletos"}, 400
 
     # ─── OVERRIDE DE LEMBRETES ──────────────────────────────────────
+
     if any(kw in mensagem for kw in ["lembra", "avisa"]):
         app.logger.info("🔎 Override detectado; tentando extrair datas...")
-        # 1) Extrai as datas
         dates = search_dates(mensagem, languages=["pt"])
         app.logger.info("✅ Datas encontradas: %s", dates)
     
-        # 2) Só agora faz o log de “entrou” e processa
         if dates:
-            app.logger.info("✅ Entrou no override de lembretes com date_str=%s", dates[0][0])
             date_str, date_dt = dates[0]
             reminder_msg = mensagem.replace(date_str, "").strip() or "Lembrete personalizado"
     
-            res = supabase.table("user_reminders").insert({
-                "user_id":  user_id,
-                "due_date": date_dt.isoformat(),
-                "message":  reminder_msg
-            }).execute()
+            # chama o insert
+            res = supabase.table("user_reminders") \
+                         .insert({
+                           "user_id":  user_id,
+                           "due_date": date_dt.isoformat(),
+                           "message":  reminder_msg
+                         }).execute()
             app.logger.info("📤 Resultado do insert em user_reminders: %s", res)
     
-            if res.error:
+            # substitua a checagem de res.error por status_code
+            if getattr(res, "status_code", 200) >= 400:
                 resposta = "Ops, não consegui salvar seu lembrete. Tenta de novo?"
             else:
                 resposta = (
