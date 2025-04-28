@@ -46,18 +46,40 @@ def fmt_data(dt: date) -> str:
 def extrair_data_hora(texto: str):
     """
     Extrai data e hora do texto, tratando:
-      1) Hora em formatos “HH:MM”, “15h” ou “15hs”
-      2) “próxima <weekday>”
-      3) Data via dateparser (DATE_ORDER='DMY')
-      4) “<dia> de <mês> [de <ano>]”
-      5) Fallback numérico “dd/mm” ou “dd/mm/aaaa”
+      1) Expressões relativas: 'hoje', 'amanhã', 'depois de amanhã'
+      2) Hora em formatos “HH:MM”, “15h” ou “15hs”
+      3) “próxima <weekday>”
+      4) Data via dateparser (DATE_ORDER='DMY')
+      5) “<dia> de <mês> [de <ano>]”
+      6) Fallback numérico “dd/mm” ou “dd/mm/aaaa”
     """
-           
+    from datetime import datetime, date, time, timedelta
+    import re
+    from dateparser.search import search_dates
+    from dateutil import tz
+
+    # globais já definidos no módulo:
+    # RE_HORA, RE_DATA, MESES_PT
+
+    # base de datas
     timezone = tz.gettz('America/Toronto')
     agora_dt = datetime.now(tz=timezone)
     hoje = agora_dt.date()
 
-    # 1) Extrair hora (HH:MM ou 15h/15hs)
+    # 1) Expressões relativas
+    if re.search(r"\bdepois de amanhã\b", texto, re.IGNORECASE):
+        data_encontrada = hoje + timedelta(days=2)
+        app.logger.info(f"🗓️ Fallback 'depois de amanhã' -> {data_encontrada}")
+    elif re.search(r"\bamanhã\b", texto, re.IGNORECASE):
+        data_encontrada = hoje + timedelta(days=1)
+        app.logger.info(f"🗓️ Fallback 'amanhã' -> {data_encontrada}")
+    elif re.search(r"\bhoje\b", texto, re.IGNORECASE):
+        data_encontrada = hoje
+        app.logger.info(f"🗓️ Fallback 'hoje' -> {data_encontrada}")
+    else:
+        data_encontrada = None
+
+    # 2) Extrair hora (HH:MM ou 15h/15hs)
     match_hora = RE_HORA.search(texto)
     hora_encontrada = None
     if match_hora:
@@ -66,21 +88,24 @@ def extrair_data_hora(texto: str):
         hora_encontrada = time(h, m)
         app.logger.info(f"⏰ Hora extraída: {hora_encontrada}")
 
-    # 2) Próxima <weekday>
+    # Se já capturamos data relativa, retornamos
+    if data_encontrada:
+        return data_encontrada, hora_encontrada
+
+    # 3) Próxima <weekday>
     m_w = re.search(
         r"\bpróxima\s+(segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:-feira)?\b",
         texto, re.IGNORECASE
     )
     if m_w:
-        WEEKDAY = {"segunda":0,"terça":1,"quarta":2,"quinta":3,
-                   "sexta":4,"sábado":5,"domingo":6}
+        WEEKDAY = {"segunda":0,"terça":1,"quarta":2,"quinta":3,"sexta":4,"sábado":5,"domingo":6}
         alvo = WEEKDAY[m_w.group(1).lower()]
         delta = (alvo - hoje.weekday() + 7) % 7 or 7
         data_encontrada = hoje + timedelta(days=delta)
         app.logger.info(f"🗓️ Próxima semana detectada: {data_encontrada}")
         return data_encontrada, hora_encontrada
 
-    # 3) Tentar via dateparser (DMY)
+    # 4) Tentar via dateparser (DMY)
     settings = {
         'PREFER_DATES_FROM': 'future',
         'RELATIVE_BASE': agora_dt,
@@ -89,50 +114,48 @@ def extrair_data_hora(texto: str):
         'DATE_ORDER': 'DMY'
     }
     resultados = search_dates(texto, languages=['pt'], settings=settings) or []
-    data_encontrada = None
     for txt, dt in resultados:
         if not RE_HORA.fullmatch(txt):
             data_encontrada = dt.date()
             app.logger.info(f"📅 dateparser extraído: {data_encontrada}")
-            break
+            return data_encontrada, hora_encontrada
 
-    # 4) Fallback “<dia> de <mês> [de <ano>]”
-    if not data_encontrada:
-        # monta pattern com meses dinâmicos
-        meses_regex = "|".join(MESES_PT[1:])
-        m_m = re.search(
-            rf"\b(\d{{1,2}})\s+de\s+({meses_regex})(?:\s+de\s+(\d{{4}}))?\b",
-            texto, re.IGNORECASE
-        )
-        if m_m:
-            d, mes_nome, ano_str = m_m.groups()
-            month = MESES_PT.index(mes_nome.lower())
-            year = int(ano_str) if ano_str else hoje.year
-            dt_tmp = date(year, month, int(d))
-            if not ano_str and dt_tmp < hoje:
-                dt_tmp = date(year+1, month, int(d))
-            data_encontrada = dt_tmp
-            app.logger.info(f"📅 mês-name fallback: {data_encontrada}")
+    # 5) Fallback “<dia> de <mês> [de <ano>]”
+    meses_regex = "|".join(MESES_PT[1:])
+    m_m = re.search(
+        rf"\b(\d{{1,2}})\s+de\s+({meses_regex})(?:\s+de\s+(\d{{4}}))?\b",
+        texto, re.IGNORECASE
+    )
+    if m_m:
+        d, mes_nome, ano_str = m_m.groups()
+        month = MESES_PT.index(mes_nome.lower())
+        year = int(ano_str) if ano_str else hoje.year
+        dt_tmp = date(year, month, int(d))
+        if not ano_str and dt_tmp < hoje:
+            dt_tmp = date(year+1, month, int(d))
+        data_encontrada = dt_tmp
+        app.logger.info(f"📅 mês-name fallback: {data_encontrada}")
+        return data_encontrada, hora_encontrada
 
-    # 5) Fallback numérico “dd/mm[/aaaa]”
-    if not data_encontrada:
-        m = RE_DATA.search(texto)
-        if m:
-            day_str, month_str, _, year_str = m.groups()
-            day, month = int(day_str), int(month_str)
-            yr = int(year_str) if year_str else hoje.year
-            if not year_str:
-                tentativa = date(hoje.year, month, day)
-                if tentativa < hoje:
-                    yr += 1
-            try:
-                data_encontrada = date(yr, month, day)
-                app.logger.info(f"📅 numeric fallback: {data_encontrada}")
-            except ValueError:
-                app.logger.info(f"❌ Data inválida fallback: {day}/{month}/{yr}")
+    # 6) Fallback numérico “dd/mm[/aaaa]”
+    m = RE_DATA.search(texto)
+    if m:
+        day_str, month_str, _, year_str = m.groups()
+        day, month = int(day_str), int(month_str)
+        yr = int(year_str) if year_str else hoje.year
+        if not year_str:
+            tentativa = date(hoje.year, month, day)
+            if tentativa < hoje:
+                yr += 1
+        try:
+            data_encontrada = date(yr, month, day)
+            app.logger.info(f"📅 numeric fallback: {data_encontrada}")
+        except ValueError:
+            app.logger.info(f"❌ Data inválida fallback: {day}/{month}/{yr}")
 
     app.logger.info(f"🔎 extrair_data_hora -> data: {data_encontrada}, hora: {hora_encontrada}")
     return data_encontrada, hora_encontrada
+
 
 def gravar_mensagem_chat(user_id, mensagem, agendamento_id, tipo="IA"):
     try:
