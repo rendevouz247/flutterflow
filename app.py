@@ -46,6 +46,14 @@ ASK_TIME_TEMPLATES = [
     "Posso confirmar sua remarcação para {date}? Se sim, informe também o horário. 😉",
 ]
 
+REMINDER_TEMPLATES = [
+    "Claro! No dia {date} vou te lembrar de agendar o banho do seu cachorro. 🐶",
+    "Combinado! Em {date}, você receberá um lembrete para marcar o banho do seu cãozinho.",
+    "Perfeito! Lembrarei você em {date} de agendar o banho do seu cachorro. 😉",
+    "Sem problemas! Te aviso em {date} para não esquecer o banho do seu cachorro."
+]
+
+
 # ==== FUNÇÕES AUXILIARES ====  
 
 def fmt_data(dt: date) -> str:
@@ -270,14 +278,11 @@ def handle_ia():
             if getattr(res, "status_code", 200) >= 400:
                 resposta = "Ops, não consegui salvar seu lembrete. Tenta de novo?"
             else:
-                resposta = (
-                    f"Beleza! Vou te lembrar em {date_dt.strftime('%d/%m/%Y')} "
-                    f"sobre “{reminder_msg}”."
-                )
+                tpl = random.choice(REMINDER_TEMPLATES)
+                resposta = tpl.format(date=date_dt.strftime('%d/%m/%Y'))
     
             gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
             return {"resposta": resposta}, 200
-
            
     # 1) Busca agendamento atual
     dados = buscar_agendamento(agendamento_id)
