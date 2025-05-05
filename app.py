@@ -217,10 +217,10 @@ def consultar_disponibilidade(company_id, atend_id, nova_data):
         dispo = res.data or {}
         slots = dispo.get("horas_disponiveis", {}).get("disponiveis", [])
         app.logger.info(f"✅ disponibilidade retornada: {slots}")
-        return slots
+        return dispo
     except Exception as e:
         app.logger.error(f"❌ Erro na disponibilidade: {e}")
-        return []
+        return {}
 
 
 def gerar_resposta_ia(mensagens):
@@ -311,7 +311,7 @@ def handle_ia():
     if any(k in mensagem for k in ["disponível", "vagas"]):
         disponiveis = consultar_disponibilidade(
             dados["company_id"], dados["atend_id"], dados.get("nova_data")
-        )
+        ).get("horas_disponiveis", {}).get("disponiveis", [])
         if disponiveis:
             resposta = "Tenho vagas nestes horários:\n" + "\n".join(f"– {h[:5]}" for h in disponiveis)
         else:
@@ -353,8 +353,6 @@ def handle_ia():
             "nova_hora": None
         }).eq("cod_id", int(agendamento_id)).execute()
         app.logger.info(f"♻️ Reset slots no agendamento {agendamento_id}")
-        gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
-        return {"resposta": resposta}, 200
 
     # 5) Iniciar reagendamento
     elif mensagem.strip().lower() == "r":
@@ -383,7 +381,6 @@ def handle_ia():
 
         # 6a) Apenas hora, mas já temos nova_data
         if re.fullmatch(r"\d{1,2}:\d{2}", mensagem) and dados.get("nova_data"):
-            # hora isolada: mantenha a data já gravada
             h, m = map(int, mensagem.split(":"))
             nova_data = date.fromisoformat(dados["nova_data"][:10])
             nova_hora = time(h, m)
@@ -415,7 +412,7 @@ def handle_ia():
 
             disponiveis = consultar_disponibilidade(
                 dados["company_id"], dados["atend_id"], nova_data.isoformat()
-            )
+            ).get("horas_disponiveis", {}).get("disponiveis", [])
             if disponiveis:
                 resposta = "Tenho vagas nestes horários:\n" + "\n".join(f"– {h[:5]}" for h in disponiveis)
             else:
