@@ -415,7 +415,7 @@ def handle_ia():
 
             disponiveis = consultar_disponibilidade(
                 dados["company_id"], dados["atend_id"], nova_data.isoformat()
-            ).get("horas_disponiveis", {}).get("disponiveis", [])
+            )
             if disponiveis:
                 resposta = "Tenho vagas nestes horários:\n" + "\n".join(f"– {h[:5]}" for h in disponiveis)
             else:
