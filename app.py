@@ -328,48 +328,39 @@ def handle_ia():
             gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
             return {"resposta": resposta}, 200
 
-        # 1) Busca agendamento atual
-        dados = buscar_agendamento(agendamento_id)
-    
-        # ← Se o agendamento vindo no payload não estiver ativo,
-        # redireciona para o agendamento ativo mais próximo do mesmo usuário
-        if mensagem in ["y","yes","sim","oui","ok", "n","não","no","non", "r"] \
-           and not dados.get("chat_ativo"):
-            ativo = supabase.table("agendamentos") \
-                .select("cod_id") \
-                .eq("user_id", user_id) \
-                .eq("status", "Agendado") \
-                .eq("chat_ativo", True) \
-                .order("date", asc=True) \
-                .order("horas", asc=True) \
-                .maybe_single() \
-                .execute().data
-    
-            if ativo and ativo.get("cod_id"):
-                app.logger.info(
-                    f"🔀 Redirecionando do agendamento {agendamento_id} para o ativo {ativo['cod_id']}"
-                )
-                agendamento_id = ativo["cod_id"]
-                dados = buscar_agendamento(agendamento_id)
-            else:
-                resposta = (
-                    "Não encontrei nenhum agendamento aberto para processar. "
-                    "Por favor, responda à mensagem do agendamento correto."
-                )
-                gravar_mensagem_chat(
-                    user_id="ia",
-                    mensagem=resposta,
-                    agendamento_id=agendamento_id
-                )
-                return {"resposta": resposta}, 200
-    
-        nova_data = None
-        nova_hora = None
-        resposta = ""
+            # … após o bloco de override de lembretes …
 
+    # 1) Busca agendamento atual
+    dados = buscar_agendamento(agendamento_id)
 
+    # ← Se o agendamento NÃO está ativo, redireciona para o ativo mais próximo
+    if mensagem in ["y","yes","sim","oui","ok","n","não","no","non","r"] \
+       and not dados.get("chat_ativo"):
+        ativo = supabase.table("agendamentos") \
+            .select("cod_id") \
+            .eq("user_id", user_id) \
+            .eq("status", "Agendado") \
+            .eq("chat_ativo", True) \
+            .order("date", asc=True) \
+            .order("horas", asc=True) \
+            .maybe_single() \
+            .execute().data
 
-    # 2) Intenção: disponibilidade
+        if ativo and ativo.get("cod_id"):
+            app.logger.info(
+                f"🔀 Redirecionando do agendamento {agendamento_id} para o ativo {ativo['cod_id']}"
+            )
+            agendamento_id = ativo["cod_id"]
+            dados = buscar_agendamento(agendamento_id)
+        else:
+            resposta = (
+                "Não encontrei nenhum agendamento aberto para processar. "
+                "Por favor, responda à mensagem do agendamento correto."
+            )
+            gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
+            return {"resposta": resposta}, 200
+
+    # 2) Intenção: disponibilidade (caso seja esse o caso)
     if any(k in mensagem for k in ["disponível", "vagas"]):
         disponiveis = consultar_disponibilidade(
             dados["company_id"], dados["atend_id"], dados.get("nova_data")
@@ -379,37 +370,26 @@ def handle_ia():
         else:
             tpl = random.choice(NO_SLOTS_TEMPLATES)
             resposta = tpl.format(date=fmt_data(date.fromisoformat(dados["nova_data"][:10])))
-        app.logger.info(f"💬 Disponibilidade respondida: {resposta}")
         gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
         return {"resposta": resposta}, 200
 
     # 3) Confirmação positiva (Y / yes / sim / oui / ok)
-    elif mensagem in ["y", "yes", "sim", "oui", "ok"]:
-        # — Se NÃO estiver em reagendamento, confirme o agendamento original
+    if mensagem in ["y", "yes", "sim", "oui", "ok"]:
+        # 3.1) Se NÃO estivermos remarcando, confirmamos o original
         if not dados.get("reagendando"):
-            # pega data e hora originais
             orig_date = datetime.fromisoformat(dados["date"]).date()
             orig_hora = dados["horas"][:5]
             resposta = random.choice(CONFIRM_TEMPLATES).format(
-                date=fmt_data(orig_date),
-                time=orig_hora
+                date=fmt_data(orig_date), time=orig_hora
             )
-
-            # atualiza para Confirmado e fecha o chat
             supabase.table("agendamentos").update({
                 "status":     "Confirmado",
                 "chat_ativo": False
             }).eq("cod_id", int(agendamento_id)).execute()
-            app.logger.info(f"✅ Agendamento {agendamento_id} confirmado pelo cliente")
-
-            gravar_mensagem_chat(
-                user_id="ia",
-                mensagem=resposta,
-                agendamento_id=agendamento_id
-            )
+            gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
             return {"resposta": resposta}, 200
 
-        # — Caso contrário (está em reagendamento), segue a lógica antiga:
+        # 3.2) Caso estejamos no fluxo de remarcação:
         if not dados.get("nova_data") or not dados.get("nova_hora"):
             resposta = (
                 "Ops, não encontrei a nova data ou horário. "
@@ -421,8 +401,7 @@ def handle_ia():
         d_obj = datetime.fromisoformat(dados["nova_data"]).date()
         t_str = dados["nova_hora"][:5]
         resposta = random.choice(CONFIRM_TEMPLATES).format(
-            date=fmt_data(d_obj),
-            time=t_str
+            date=fmt_data(d_obj), time=t_str
         )
         supabase.table("agendamentos").update({
             "date":        dados["nova_data"],
@@ -431,7 +410,6 @@ def handle_ia():
             "reagendando": False,
             "chat_ativo":  False
         }).eq("cod_id", int(agendamento_id)).execute()
-        app.logger.info(f"♻️ Gravação da confirmação no banco (chat encerrado)")
         gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
         return {"resposta": resposta}, 200
 
