@@ -330,31 +330,22 @@ def handle_ia():
             resposta = tpl.format(date=fmt_data(date.fromisoformat(dados["nova_data"][:10])))
         app.logger.info(f"💬 Disponibilidade respondida: {resposta}")
 
-    # 3) Confirmação positiva (inclui “ok”)
+    # 3) Confirmação positiva (Y / yes / sim / oui / ok)
     elif mensagem in ["y", "yes", "sim", "oui", "ok"]:
-        # Se o usuário disparou “ok” sem ter informado nova_data/hora, pergunta de novo
         if not dados.get("nova_data") or not dados.get("nova_hora"):
             resposta = (
                 "Ops, não encontrei a nova data ou horário. "
                 "Por favor, diga a data e hora desejadas (ex: '25/05 às 14:00')."
             )
-            # Grava no chat e retorna, mantendo chat_ativo=True
-            gravar_mensagem_chat(
-                user_id="ia",
-                mensagem=resposta,
-                agendamento_id=agendamento_id
-            )
+            gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
             return {"resposta": resposta}, 200
-
-        # Agora sim formata data e hora
+    
         d_obj = datetime.fromisoformat(dados["nova_data"]).date()
         t_str = dados["nova_hora"][:5]
         resposta = random.choice(CONFIRM_TEMPLATES).format(
             date=fmt_data(d_obj),
             time=t_str
         )
-        
-        # Atualiza agendamento e fecha o chat
         supabase.table("agendamentos").update({
             "date":        dados["nova_data"],
             "horas":       dados["nova_hora"],
@@ -363,16 +354,11 @@ def handle_ia():
             "chat_ativo":  False
         }).eq("cod_id", int(agendamento_id)).execute()
         app.logger.info(f"♻️ Gravação da confirmação no banco (chat encerrado)")
-        
-        # Grava no chat e retorna a resposta imediatamente
-        gravar_mensagem_chat(
-            user_id="ia",
-            mensagem=resposta,
-            agendamento_id=agendamento_id
-        )
+        gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
         return {"resposta": resposta}, 200
 
-    # 4) Confirmação negativa
+
+    # 4) Confirmação negativa (N / não / no / non)
     elif mensagem in ["n", "não", "no", "non"]:
         resposta = "Tranquilo! Qual outro dia e horário funcionam melhor pra você? 😉"
         supabase.table("agendamentos").update({
@@ -380,11 +366,13 @@ def handle_ia():
             "nova_hora": None
         }).eq("cod_id", int(agendamento_id)).execute()
         app.logger.info(f"♻️ Reset slots no agendamento {agendamento_id}")
-
-    # 5) Iniciar reagendamento
+        gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
+        return {"resposta": resposta}, 200
+    
+    
+    # 5) Iniciar reagendamento (R)
     elif mensagem.strip().lower() == "r":
         resposta = "Claro! Qual dia funciona melhor para marcarmos?"
-        # Marca no banco que o chat está ativo e zera novas datas e horas
         supabase.table("agendamentos").update({
             "reagendando": True,
             "nova_data": None,
@@ -392,15 +380,8 @@ def handle_ia():
             "chat_ativo": True
         }).eq("cod_id", int(agendamento_id)).execute()
         app.logger.info(f"♻️ Iniciando reagendamento no agendamento {agendamento_id}")
-
-        # Grava a resposta e retorna logo em seguida
-        gravar_mensagem_chat(
-            user_id="ia",
-            mensagem=resposta,
-            agendamento_id=agendamento_id
-        )
+        gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
         return {"resposta": resposta}, 200
-
 
     # 6) Processamento de data/hora informada
     else:
