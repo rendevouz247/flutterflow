@@ -67,6 +67,8 @@ def envia_lembretes():
 
             # Monta e insere mensagem
             msg = formata_mensagem(nome, atd, empresa, data_str, hora)
+
+            # 2) Insere no chat
             supabase.table("mensagens_chat").insert({
                 "user_id": user_id,
                 "mensagem": msg,
@@ -74,23 +76,26 @@ def envia_lembretes():
                 "data_envio": datetime.now(timezone.utc).isoformat()
             }).execute()
 
-            supabase.table("mensagens_chat_historico").insert({
-                "user_id": user_id,
-                "mensagem": mensagem,
-                "agendamento_id": cod_id,
-                "data_envio": datetime.utcnow().isoformat()
-            }).execute()
-
-            # Marca envio e deixa chat ativo
+            # 3) Marca o agendamento imediatamente
             supabase.table("agendamentos").update({
                 "sms_3dias": True,
                 "chat_ativo": True
             }).eq("cod_id", cod_id).execute()
 
-            logging.info(f"✅ Lembrete enviado (ag. {cod_id}) para user {user_id}")
-
+            # 4) Insere no histórico, mas sem quebrar se falhar
+            try:
+            supabase.table("mensagens_chat_historico").insert({
+                "user_id": user_id,
+                "mensagem": msg,
+                "agendamento_id": cod_id,
+                "data_envio": datetime.now(timezone.utc).isoformat()
+            }).execute()
+            except Exception as hist_err:
+                logging.warning(f"⚠️ Falha ao inserir histórico para ag. {cod_id}: {hist_err}")
+                
+            logging.info(f"✅ Lembrete (ag. {cod_id}) enviado para user {user_id}")
         except Exception as e:
-            logging.error(f"❌ Erro no agendamento {ag.get('cod_id')} user {user_id}: {e}")
+            logging.error(f"❌ Erro no agendamento {cod_id} user {user_id}: {e}")
 
 if __name__ == "__main__":
     envia_lembretes()
