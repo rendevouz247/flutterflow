@@ -330,9 +330,21 @@ def handle_ia():
 
     # 1) Busca agendamento atual
     dados = buscar_agendamento(agendamento_id)
+
+    # ← AQUI: impede processar Y/N/R em chat inativo
+    if mensagem in ["y","yes","sim","oui","ok", "n","não","no","non", "r"] \
+       and not dados.get("chat_ativo"):
+        resposta = (
+            "Este agendamento não está ativo para confirmação ou reagendamento. "
+            "Por favor, responda à mensagem do agendamento correto."
+        )
+        gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
+        return {"resposta": resposta}, 200
+
     nova_data = None
     nova_hora = None
     resposta = ""
+
 
     # 2) Intenção: disponibilidade
     if any(k in mensagem for k in ["disponível", "vagas"]):
