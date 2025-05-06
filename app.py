@@ -332,16 +332,33 @@ def handle_ia():
 
     # 3) Confirmação positiva (inclui “ok”)
     elif mensagem in ["y", "yes", "sim", "oui", "ok"]:
-        # Formata data e hora
+        # Se o usuário disparou “ok” sem ter informado nova_data/hora, pergunta de novo
+        if not dados.get("nova_data") or not dados.get("nova_hora"):
+            resposta = (
+                "Ops, não encontrei a nova data ou horário. "
+                "Por favor, diga a data e hora desejadas (ex: '25/05 às 14:00')."
+            )
+            # Grava no chat e retorna, mantendo chat_ativo=True
+            gravar_mensagem_chat(
+                user_id="ia",
+                mensagem=resposta,
+                agendamento_id=agendamento_id
+            )
+            return {"resposta": resposta}, 200
+
+        # Agora sim formata data e hora
         d_obj = datetime.fromisoformat(dados["nova_data"]).date()
         t_str = dados["nova_hora"][:5]
-        resposta = random.choice(CONFIRM_TEMPLATES).format(date=fmt_data(d_obj), time=t_str)
+        resposta = random.choice(CONFIRM_TEMPLATES).format(
+            date=fmt_data(d_obj),
+            time=t_str
+        )
         
         # Atualiza agendamento e fecha o chat
         supabase.table("agendamentos").update({
-            "date":    dados["nova_data"],
-            "horas":   dados["nova_hora"],
-            "status":  "Reagendado",
+            "date":        dados["nova_data"],
+            "horas":       dados["nova_hora"],
+            "status":      "Reagendado",
             "reagendando": False,
             "chat_ativo":  False
         }).eq("cod_id", int(agendamento_id)).execute()
@@ -354,7 +371,6 @@ def handle_ia():
             agendamento_id=agendamento_id
         )
         return {"resposta": resposta}, 200
-
 
     # 4) Confirmação negativa
     elif mensagem in ["n", "não", "no", "non"]:
