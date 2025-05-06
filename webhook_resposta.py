@@ -84,16 +84,18 @@ def envia_lembretes():
 
             # 4) Insere no histórico, mas sem quebrar se falhar
             try:
-            supabase.table("mensagens_chat_historico").insert({
-                "user_id": user_id,
-                "mensagem": msg,
-                "agendamento_id": cod_id,
-                "data_envio": datetime.now(timezone.utc).isoformat()
-            }).execute()
+                supabase.table("mensagens_chat_historico").insert({
+                    "user_id": user_id,
+                    "mensagem": msg,
+                    "agendamento_id": cod_id,
+                    "data_envio": datetime.now(timezone.utc).isoformat()
+                }).execute()
             except Exception as hist_err:
                 logging.warning(f"⚠️ Falha ao inserir histórico para ag. {cod_id}: {hist_err}")
                 
+            # 5) Confirma que tudo deu certo
             logging.info(f"✅ Lembrete (ag. {cod_id}) enviado para user {user_id}")
+        
         except Exception as e:
             logging.error(f"❌ Erro no agendamento {cod_id} user {user_id}: {e}")
 
