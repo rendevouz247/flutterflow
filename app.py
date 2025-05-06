@@ -188,6 +188,16 @@ def gravar_mensagem_chat(user_id, mensagem, agendamento_id, tipo="IA"):
             "tipo":           tipo
         }).execute()
         app.logger.info(f"💬 Mensagem gravada no chat: '{mensagem}' às {agora}")
+
+        supabase.table("mensagens_chat_historico").insert({
+            "user_id":        user_id,
+            "mensagem":       mensagem,
+            "agendamento_id": agendamento_id,
+            "data_envio":     agora,
+            "tipo":           tipo
+        }).execute()
+        app.logger.info(f"💬 Mensagem gravada no chat: '{mensagem}' às {agora}")
+    
     except Exception as e:
         app.logger.error(f"❌ Erro ao gravar chat: {e}")
 
