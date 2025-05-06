@@ -204,15 +204,29 @@ def gravar_mensagem_chat(user_id, mensagem, agendamento_id, tipo="IA"):
 def buscar_agendamento(cod_id):
     try:
         res = supabase.table("agendamentos") \
-            .select("nova_data, nova_hora, company_id, atend_id, chat_ativo") \
+            .select(
+                "date, "          # data original
+                "horas, "         # hora original
+                "nova_data, "     # nova data, se houver
+                "nova_hora, "     # nova hora, se houver
+                "reagendando, "   # flag de reagendamento em curso
+                "status, "        # status atual (Agendado/Confirmado/etc)
+                "company_id, "    # empresa do agendamento
+                "atend_id, "      # atendente do agendamento
+                "chat_ativo"      # controla fluxo de chat
+            ) \
             .eq("cod_id", int(cod_id)) \
-            .maybe_single().execute()
+            .maybe_single() \
+            .execute()
+
         dados = res.data or {}
         app.logger.info(f"🔍 Dados do agendamento: {dados}")
         return dados
+
     except Exception as e:
         app.logger.error(f"❌ Erro ao buscar agendamento: {e}")
         return {}
+
 
 
 def consultar_disponibilidade(company_id, atend_id, nova_data):
