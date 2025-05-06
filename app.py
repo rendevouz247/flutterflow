@@ -7,7 +7,6 @@ from supabase import create_client
 from groq import Groq
 from dateutil import tz
 
-
 # ==== CONFIGURAÇÃO ====  
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
