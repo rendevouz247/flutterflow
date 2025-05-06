@@ -1,59 +1,90 @@
 from supabase import create_client, Client as SupabaseClient
-from datetime import datetime, timedelta
-import os
+from datetime import datetime, timedelta, timezone, time
+import os, logging
 
 # CONFIG
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
 supabase: SupabaseClient = create_client(SUPABASE_URL, SUPABASE_KEY)
+logging.basicConfig(level=logging.INFO)
 
-hoje = datetime.utcnow().date()
-fim = hoje + timedelta(days=3)
-
-agendamentos = supabase.table("agendamentos") \
-    .select("cod_id, name_user, user_id, date, horas, nome_atendente, company_name") \
-    .eq("sms_3dias", False) \
-    .eq("status", "Agendado") \
-    .gte("date", hoje.isoformat()) \
-    .lte("date", fim.isoformat()) \
-    .execute()
-
-for ag in agendamentos.data:
-    nome = ag.get("name_user") or "Client"
-    user_id = ag["user_id"]
-    cod_id = ag["cod_id"]
-    data = datetime.strptime(ag["date"], "%Y-%m-%d").strftime("%d/%m/%Y")
-    hora = ag["horas"][:5]
-    nome_atendente = ag.get("nome_atendente") or "notre spécialiste"
-    empresa = ag.get("company_name") or "notre clinique"
-
-    mensagem = (
-        f"Bonjour {nome}, votre rendez-vous avec {nome_atendente} - {empresa} est prévu pour le {data} à {hora}. "
+def formata_mensagem(nome, atd, empresa, data, hora):
+    texto = (
+        f"Bonjour {nome}, votre rendez-vous avec {atd} - {empresa} "
+        f"est prévu pour le {data} à {hora}. "
         "Répondez par Y pour confirmer, N pour annuler ou R pour reprogrammer."
     )
+    return texto.replace("\n", " ").strip()[:800]
 
-    mensagem = mensagem.replace("\n", " ").strip()
-    mensagem = mensagem[:800]
+def envia_lembretes():
+    hoje = datetime.now(timezone.utc).date()
+    fim = hoje + timedelta(days=3)
 
-    try:
-        # 💬 Insere a mensagem diretamente no chat do FlutterFlow
-        supabase.table("mensagens_chat").insert({
-            "user_id": user_id,
-            "mensagem": mensagem,
-            "agendamento_id": cod_id,
-            "data_envio": datetime.utcnow().isoformat()
-        }).execute()
+    # 1) Lista de usuários com chat ativo pendente
+    pendentes = supabase.table("agendamentos") \
+        .select("user_id") \
+        .eq("chat_ativo", True) \
+        .eq("status", "Agendado") \
+        .execute()
+    usuarios_com_chat = {r["user_id"] for r in (pendentes.data or [])}
 
-        # ✅ Marca que o lembrete foi enviado e ativa o chat
-        supabase.table("agendamentos").update({
-            "sms_3dias": True,
-            "chat_ativo": True
-        }).eq("cod_id", cod_id).execute()
+    # 2) Busca agendamentos de 3 dias ainda não enviados
+    resp = supabase.table("agendamentos") \
+        .select("cod_id, name_user, user_id, date, horas, nome_atendente, company_name") \
+        .eq("sms_3dias", False) \
+        .eq("status", "Agendado") \
+        .gte("date", hoje.isoformat()) \
+        .lte("date", fim.isoformat()) \
+        .execute()
 
-        print(f"✅ Mensagem enviada no chat do usuário {nome} ({user_id})")
+    # 3) Agrupa por user_id
+    by_user: dict[str, list[dict]] = {}
+    for ag in resp.data or []:
+        uid = ag["user_id"]
+        # só guarda quem NÃO está com chat ativo pendente
+        if uid in usuarios_com_chat:
+            continue
+        by_user.setdefault(uid, []).append(ag)
 
-    except Exception as e:
-        print(f"❌ Erro ao enviar mensagem para o chat: {e}")
+    # 4) Para cada usuário, envia só o próximo agendamento
+    for user_id, ag_list in by_user.items():
+        # Ordena pelo mais próximo (data + hora)
+        ag_list.sort(key=lambda ag: datetime.combine(
+            datetime.fromisoformat(ag["date"]),
+            time(*map(int, ag["horas"][:5].split(":"))),
+            tzinfo=timezone.utc
+        ))
+        ag = ag_list[0]
 
+        try:
+            # Dados
+            nome = ag.get("name_user") or "Client"
+            atd = ag.get("nome_atendente") or "notre spécialiste"
+            empresa = ag.get("company_name") or "notre clinique"
+            data_str = datetime.fromisoformat(ag["date"]).strftime("%d/%m/%Y")
+            hora = ag["horas"][:5]
+            cod_id = ag["cod_id"]
+
+            # Monta e insere mensagem
+            msg = formata_mensagem(nome, atd, empresa, data_str, hora)
+            supabase.table("mensagens_chat").insert({
+                "user_id": user_id,
+                "mensagem": msg,
+                "agendamento_id": cod_id,
+                "data_envio": datetime.now(timezone.utc).isoformat()
+            }).execute()
+
+            # Marca envio e deixa chat ativo
+            supabase.table("agendamentos").update({
+                "sms_3dias": True,
+                "chat_ativo": True
+            }).eq("cod_id", cod_id).execute()
+
+            logging.info(f"✅ Lembrete enviado (ag. {cod_id}) para user {user_id}")
+
+        except Exception as e:
+            logging.error(f"❌ Erro no agendamento {ag.get('cod_id')} user {user_id}: {e}")
+
+if __name__ == "__main__":
+    envia_lembretes()
 
