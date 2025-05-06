@@ -336,7 +336,31 @@ def handle_ia():
 
     # 3) Confirmação positiva (Y / yes / sim / oui / ok)
     elif mensagem in ["y", "yes", "sim", "oui", "ok"]:
-        # Guard: sem nova_data/nova_hora, pede de novo e retorna
+        # — Se NÃO estiver em reagendamento, confirme o agendamento original
+        if not dados.get("reagendando"):
+            # pega data e hora originais
+            orig_date = datetime.fromisoformat(dados["date"]).date()
+            orig_hora = dados["horas"][:5]
+            resposta = random.choice(CONFIRM_TEMPLATES).format(
+                date=fmt_data(orig_date),
+                time=orig_hora
+            )
+
+            # atualiza para Confirmado e fecha o chat
+            supabase.table("agendamentos").update({
+                "status":     "Confirmado",
+                "chat_ativo": False
+            }).eq("cod_id", int(agendamento_id)).execute()
+            app.logger.info(f"✅ Agendamento {agendamento_id} confirmado pelo cliente")
+
+            gravar_mensagem_chat(
+                user_id="ia",
+                mensagem=resposta,
+                agendamento_id=agendamento_id
+            )
+            return {"resposta": resposta}, 200
+
+        # — Caso contrário (está em reagendamento), segue a lógica antiga:
         if not dados.get("nova_data") or not dados.get("nova_hora"):
             resposta = (
                 "Ops, não encontrei a nova data ou horário. "
@@ -345,14 +369,12 @@ def handle_ia():
             gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
             return {"resposta": resposta}, 200
 
-        # Agora sim formata data e hora
         d_obj = datetime.fromisoformat(dados["nova_data"]).date()
         t_str = dados["nova_hora"][:5]
         resposta = random.choice(CONFIRM_TEMPLATES).format(
             date=fmt_data(d_obj),
             time=t_str
         )
-        # Atualiza agendamento e fecha o chat
         supabase.table("agendamentos").update({
             "date":        dados["nova_data"],
             "horas":       dados["nova_hora"],
@@ -363,6 +385,7 @@ def handle_ia():
         app.logger.info(f"♻️ Gravação da confirmação no banco (chat encerrado)")
         gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
         return {"resposta": resposta}, 200
+
 
     # 4) Confirmação negativa (N / não / no / non)
     elif mensagem in ["n", "não", "no", "non"]:
