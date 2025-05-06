@@ -1,5 +1,6 @@
 from supabase import create_client, Client as SupabaseClient
 from datetime import datetime, timedelta, timezone, time
+from dateutil.tz import tzlocal
 import os, logging
 
 # CONFIG
@@ -74,7 +75,7 @@ def envia_lembretes():
                 "mensagem": msg,
                 "tipo": "IA",
                 "agendamento_id": cod_id,
-                "data_envio": datetime.now(timezone.utc).isoformat()
+                "data_envio": datetime.now(tzlocal()).isoformat()
             }).execute()
 
             # 3) Marca o agendamento imediatamente
@@ -90,7 +91,7 @@ def envia_lembretes():
                     "mensagem": msg,
                     "tipo": "IA",
                     "agendamento_id": cod_id,
-                    "data_envio": datetime.now(timezone.utc).isoformat()
+                    "data_envio": datetime.now(tzlocal()).isoformat()
                 }).execute()
             except Exception as hist_err:
                 logging.warning(f"⚠️ Falha ao inserir histórico para ag. {cod_id}: {hist_err}")
