@@ -72,6 +72,7 @@ def envia_lembretes():
             supabase.table("mensagens_chat").insert({
                 "user_id": user_id,
                 "mensagem": msg,
+                "tipo": "IA",
                 "agendamento_id": cod_id,
                 "data_envio": datetime.now(timezone.utc).isoformat()
             }).execute()
@@ -87,6 +88,7 @@ def envia_lembretes():
                 supabase.table("mensagens_chat_historico").insert({
                     "user_id": user_id,
                     "mensagem": msg,
+                    "tipo": "IA",
                     "agendamento_id": cod_id,
                     "data_envio": datetime.now(timezone.utc).isoformat()
                 }).execute()
