@@ -256,18 +256,22 @@ def handle_ia():
     # Responde ao preflight CORS
     if request.method == "OPTIONS":
         return "", 200
-    
+
     data = request.get_json(force=True) or {}
     app.logger.info("🚀 handle_ia chamado com payload: %s", data)
     user_id = data.get("user_id")
     mensagem = data.get("mensagem", "").strip().lower()
     agendamento_id = data.get("agendamento_id")
 
-    app.logger.info("🔍 Mensagem recebida para override de lembrete: %s", mensagem)
-
+    # Validação básica
     if not user_id or not mensagem or not agendamento_id:
         return {"erro": "Dados incompletos"}, 400
 
+    # ← Guard: ignora mensagens enviadas pela própria IA para evitar loop
+    if user_id == "ia":
+        return {}, 200
+
+    app.logger.info("🔍 Mensagem recebida para override de lembrete: %s", mensagem)
 
     # ─── OVERRIDE DE LEMBRETES ──────────────────────────────────────
     if any(kw in mensagem for kw in ["lembra", "avisa"]):
@@ -275,43 +279,42 @@ def handle_ia():
         dates = search_dates(mensagem, languages=["pt"])
         if dates:
             date_str, date_dt = dates[0]
-    
+
             # 2) Remove a data da mensagem
             text_wo_date = re.sub(re.escape(date_str), "", mensagem, flags=re.IGNORECASE)
-    
+
             # 3) Remove palavras de gatilho e preposições comuns
             reminder_msg = re.sub(
-                r"\b(me lembra( me)?|avisa( me)?|lembra de|lembra)\b", 
-                "", 
+                r"\b(me lembra( me)?|avisa( me)?|lembra de|lembra)\b",
+                "",
                 text_wo_date,
                 flags=re.IGNORECASE
             )
             # 4) Remove “dia”, “em”, “para” e pontuações soltas
             reminder_msg = re.sub(r"\b(dia|em|para)\b", "", reminder_msg, flags=re.IGNORECASE)
             reminder_msg = reminder_msg.replace("?", "").strip()
-    
+
             # 5) Se ficar vazio, define mensagem genérica
             if not reminder_msg:
                 reminder_msg = "seu lembrete"
-    
+
             # 6) Grava no banco
             res = supabase.table("user_reminders").insert({
                 "user_id":  user_id,
                 "due_date": date_dt.isoformat(),
                 "message":  reminder_msg
             }).execute()
-    
+
             # 7) Monta resposta usando template genérico
             tpl = random.choice(REMINDER_TEMPLATES)
             resposta = tpl.format(
                 date=date_dt.strftime("%d/%m/%Y"),
                 task=reminder_msg
             )
-    
+
             gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
             return {"resposta": resposta}, 200
 
-           
     # 1) Busca agendamento atual
     dados = buscar_agendamento(agendamento_id)
     nova_data = None
@@ -329,9 +332,12 @@ def handle_ia():
             tpl = random.choice(NO_SLOTS_TEMPLATES)
             resposta = tpl.format(date=fmt_data(date.fromisoformat(dados["nova_data"][:10])))
         app.logger.info(f"💬 Disponibilidade respondida: {resposta}")
+        gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
+        return {"resposta": resposta}, 200
 
     # 3) Confirmação positiva (Y / yes / sim / oui / ok)
     elif mensagem in ["y", "yes", "sim", "oui", "ok"]:
+        # Guard: sem nova_data/nova_hora, pede de novo e retorna
         if not dados.get("nova_data") or not dados.get("nova_hora"):
             resposta = (
                 "Ops, não encontrei a nova data ou horário. "
@@ -339,13 +345,15 @@ def handle_ia():
             )
             gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
             return {"resposta": resposta}, 200
-    
+
+        # Agora sim formata data e hora
         d_obj = datetime.fromisoformat(dados["nova_data"]).date()
         t_str = dados["nova_hora"][:5]
         resposta = random.choice(CONFIRM_TEMPLATES).format(
             date=fmt_data(d_obj),
             time=t_str
         )
+        # Atualiza agendamento e fecha o chat
         supabase.table("agendamentos").update({
             "date":        dados["nova_data"],
             "horas":       dados["nova_hora"],
@@ -357,7 +365,6 @@ def handle_ia():
         gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
         return {"resposta": resposta}, 200
 
-
     # 4) Confirmação negativa (N / não / no / non)
     elif mensagem in ["n", "não", "no", "non"]:
         resposta = "Tranquilo! Qual outro dia e horário funcionam melhor pra você? 😉"
@@ -368,8 +375,7 @@ def handle_ia():
         app.logger.info(f"♻️ Reset slots no agendamento {agendamento_id}")
         gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
         return {"resposta": resposta}, 200
-    
-    
+
     # 5) Iniciar reagendamento (R)
     elif mensagem.strip().lower() == "r":
         resposta = "Claro! Qual dia funciona melhor para marcarmos?"
@@ -430,7 +436,6 @@ def handle_ia():
 
         # 9) Quando não for lembrete, nem reagendamento…
         else:
-            # Se chat_ativo == False, bloqueia qualquer outra intenção
             if not dados.get("chat_ativo"):
                 resposta = (
                     "No momento só posso ajudar com lembretes e reagendamentos. "
@@ -439,7 +444,7 @@ def handle_ia():
                 app.logger.info("🚫 Bloqueado fallback IA pois chat_ativo=False")
                 gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
                 return {"resposta": resposta}, 200
-    
+
             # 10) Se estivermos em reagendamento (chat_ativo == True), cai no LLM
             historico = supabase.table("mensagens_chat") \
                 .select("mensagem,tipo") \
@@ -456,10 +461,11 @@ def handle_ia():
             })
             resposta = gerar_resposta_ia(msgs)
             app.logger.info("💬 Fallback IA para reagendamento em curso")
-    
-        # 11) Grava e retorna
+
+        # 11) Grava e retorna (fall-through)
         gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
         return {"resposta": resposta}, 200
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
