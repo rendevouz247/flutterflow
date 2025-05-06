@@ -328,22 +328,45 @@ def handle_ia():
             gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
             return {"resposta": resposta}, 200
 
-    # 1) Busca agendamento atual
-    dados = buscar_agendamento(agendamento_id)
+        # 1) Busca agendamento atual
+        dados = buscar_agendamento(agendamento_id)
+    
+        # ← Se o agendamento vindo no payload não estiver ativo,
+        # redireciona para o agendamento ativo mais próximo do mesmo usuário
+        if mensagem in ["y","yes","sim","oui","ok", "n","não","no","non", "r"] \
+           and not dados.get("chat_ativo"):
+            ativo = supabase.table("agendamentos") \
+                .select("cod_id") \
+                .eq("user_id", user_id) \
+                .eq("status", "Agendado") \
+                .eq("chat_ativo", True) \
+                .order("date", asc=True) \
+                .order("horas", asc=True) \
+                .maybe_single() \
+                .execute().data
+    
+            if ativo and ativo.get("cod_id"):
+                app.logger.info(
+                    f"🔀 Redirecionando do agendamento {agendamento_id} para o ativo {ativo['cod_id']}"
+                )
+                agendamento_id = ativo["cod_id"]
+                dados = buscar_agendamento(agendamento_id)
+            else:
+                resposta = (
+                    "Não encontrei nenhum agendamento aberto para processar. "
+                    "Por favor, responda à mensagem do agendamento correto."
+                )
+                gravar_mensagem_chat(
+                    user_id="ia",
+                    mensagem=resposta,
+                    agendamento_id=agendamento_id
+                )
+                return {"resposta": resposta}, 200
+    
+        nova_data = None
+        nova_hora = None
+        resposta = ""
 
-    # ← AQUI: impede processar Y/N/R em chat inativo
-    if mensagem in ["y","yes","sim","oui","ok", "n","não","no","non", "r"] \
-       and not dados.get("chat_ativo"):
-        resposta = (
-            "Este agendamento não está ativo para confirmação ou reagendamento. "
-            "Por favor, responda à mensagem do agendamento correto."
-        )
-        gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
-        return {"resposta": resposta}, 200
-
-    nova_data = None
-    nova_hora = None
-    resposta = ""
 
 
     # 2) Intenção: disponibilidade
