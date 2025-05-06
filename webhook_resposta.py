@@ -74,6 +74,13 @@ def envia_lembretes():
                 "data_envio": datetime.now(timezone.utc).isoformat()
             }).execute()
 
+            supabase.table("mensagens_chat_historico").insert({
+                "user_id": user_id,
+                "mensagem": mensagem,
+                "agendamento_id": cod_id,
+                "data_envio": datetime.utcnow().isoformat()
+            }).execute()
+
             # Marca envio e deixa chat ativo
             supabase.table("agendamentos").update({
                 "sms_3dias": True,
