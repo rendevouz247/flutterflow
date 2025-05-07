@@ -211,6 +211,7 @@ def buscar_agendamento(cod_id):
         return {}
 
 
+
 def consultar_disponibilidade(company_id, atend_id, nova_data):
     try:
         app.logger.info(f"🔍 consultando disponibilidade para company_id={company_id}, atend_id={atend_id}, date={nova_data}")
