@@ -267,10 +267,13 @@ def handle_ia():
     nova_hora = None
     resposta = ""
     
-    # ← Inserir AQUI o guard de “redirecionamento” ou “continua”:
-    if mensagem in ["y","yes","sim","oui","ok","n","não","no","non","r"] \
-       and not dados.get("chat_ativo"):
+    # ← Guard revisado: bloqueia Y, N e R enquanto chat não ativo OU sms_3dias=False
+    if mensagem in ["y","yes","sim","oui","ok",
+                    "n","não","no","non",
+                    "r"] \
+       and (not dados.get("chat_ativo") or not sms_3dias):
 
+        # tenta redirecionar para outro agendamento ativo, se existir
         resp = supabase.table("agendamentos") \
             .select("cod_id") \
             .eq("user_id", user_id) \
@@ -281,19 +284,28 @@ def handle_ia():
             .order("horas", desc=False) \
             .maybe_single() \
             .execute()
-    
-        outro = None
-        if resp is not None:
-            outro = resp.data
-    
+
+        outro = resp.data if resp is not None else None
+
         if outro and outro.get("cod_id"):
             app.logger.info(
                 f"🔀 Redirecionando de {agendamento_id} para ativo {outro['cod_id']}"
             )
             agendamento_id = outro["cod_id"]
             dados = buscar_agendamento(agendamento_id)
-
-        # se não tiver outro ativo, deixamos o fluxo seguir no mesmo agendame
+        else:
+            # se não houver outro ativo, responde bloqueio genérico
+            resposta = (
+                "Ainda não podemos processar sua solicitação via IA: "
+                "só liberamos confirmação ou reagendamento a partir de 3 dias antes. "
+                "Se precisar, use o app para reagendar."
+            )
+            gravar_mensagem_chat(
+                user_id="ia",
+                mensagem=resposta,
+                agendamento_id=agendamento_id
+            )
+            return {"resposta": resposta}, 200
 
     # 2) Intenção: disponibilidade
     if any(k in mensagem for k in ["disponível", "vagas"]):
