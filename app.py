@@ -277,8 +277,8 @@ def handle_ia():
             .eq("status", "Agendado") \
             .eq("chat_ativo", True) \
             .neq("cod_id", int(agendamento_id)) \
-            .order("date", asc=True) \
-            .order("horas", asc=True) \
+            .order("date", ascending=True) \
+            .order("horas", ascending=True) \
             .maybe_single() \
             .execute().data
 
