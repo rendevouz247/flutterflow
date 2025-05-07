@@ -272,7 +272,7 @@ def handle_ia():
             dados["company_id"], dados["atend_id"], dados.get("nova_data")
         ).get("horas_disponiveis", {}).get("disponiveis", [])
         if disponiveis:
-            resposta = "(Dia (f" {nova_data"}) tenho vagas nestes horários:\n" + "\n".join(f"– {h[:5]}" for h in disponiveis)
+            resposta = "(Dia (f"{nova_data}) tenho vagas nestes horários:\n" + "\n".join(f"– {h[:5]}" for h in disponiveis)
         else:
             tpl = random.choice(NO_SLOTS_TEMPLATES)
             resposta = tpl.format(date=fmt_data(date.fromisoformat(dados["nova_data"][:10])))
