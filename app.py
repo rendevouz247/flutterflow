@@ -320,8 +320,22 @@ def handle_ia():
 
     # 5) Iniciar reagendamento
     elif mensagem.strip().lower() == "r":
+        # ── se ainda não recebeu o SMS de 3 dias, bloqueia aqui ──
+        if not sms_3dias:
+            resposta = (
+                "Desculpe, ainda não posso reagendar via IA antes de 3 dias "
+                "do seu agendamento. Se precisar, use o app para reagendar."
+            )
+            app.logger.info("🚫 Bloqueado 'R' pois sms_3dias=False")
+            gravar_mensagem_chat(
+                user_id="ia",
+                mensagem=resposta,
+                agendamento_id=agendamento_id
+            )
+            return {"resposta": resposta}, 200
+    
+        # ── SMS de 3 dias já foi enviado → fluxo original ──
         resposta = "Claro! Qual e o dia melhor para você?"
-        # Marca no banco que o chat está ativo e zera novas datas e horas
         supabase.table("agendamentos").update({
             "reagendando": True,
             "nova_data": None,
@@ -329,7 +343,7 @@ def handle_ia():
             "chat_ativo": True
         }).eq("cod_id", int(agendamento_id)).execute()
         app.logger.info(f"♻️ Iniciando reagendamento no agendamento {agendamento_id}")
-
+    
         # Grava a resposta e retorna logo em seguida
         gravar_mensagem_chat(
             user_id="ia",
@@ -337,6 +351,7 @@ def handle_ia():
             agendamento_id=agendamento_id
         )
         return {"resposta": resposta}, 200
+
 
 
     # 6) Processamento de data/hora informada
