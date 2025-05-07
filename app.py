@@ -285,22 +285,45 @@ def handle_ia():
 
     # 3) Confirmação positiva (inclui “ok”)
     elif mensagem in ["y", "yes", "sim", "oui", "ok"]:
-        # Formata data e hora
+        # ── bloqueio se não recebeu SMS de 3 dias ou chat não ativo ──
+        if not sms_3dias or not dados.get("chat_ativo"):
+            resposta = (
+                "Ainda não podemos confirmar: o reagendamento via IA só libera a partir de 3 dias "
+                "antes da sua data marcada. Se precisar, use o app para reagendar."
+            )
+            app.logger.info("🚫 Bloqueado confirmação pois sms_3dias=False ou chat_ativo=False")
+            gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
+            return {"resposta": resposta}, 200
+    
+        # ── bloqueio se ainda não escolheu um horário ──
+        if not dados.get("nova_hora"):
+            resposta = (
+                "Você ainda não escolheu um horário para confirmar. "
+                "Digite 'R' para iniciar o reagendamento e selecione um horário."
+            )
+            app.logger.info("🚫 Bloqueado confirmação pois nova_hora=None")
+            gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
+            return {"resposta": resposta}, 200
+    
+        # ── tudo OK, segue o fluxo original ──
         d_obj = datetime.fromisoformat(dados["nova_data"]).date()
         t_str = dados["nova_hora"][:5]
-        resposta = random.choice(CONFIRM_TEMPLATES).format(date=fmt_data(d_obj), time=t_str)
-        
+        resposta = random.choice(CONFIRM_TEMPLATES).format(
+            date=fmt_data(d_obj),
+            time=t_str
+        )
+    
         # Atualiza agendamento e fecha o chat
         supabase.table("agendamentos").update({
-            "date":    dados["nova_data"],
-            "horas":   dados["nova_hora"],
-            "status":  "Reagendado",
+            "date":       dados["nova_data"],
+            "horas":      dados["nova_hora"],
+            "status":     "Reagendado",
             "reagendando": False,
-            "chat_ativo":  False
+            "chat_ativo": False
         }).eq("cod_id", int(agendamento_id)).execute()
-        app.logger.info(f"♻️ Gravação da confirmação no banco (chat encerrado)")
-        
-        # Grava no chat e retorna a resposta imediatamente
+        app.logger.info("♻️ Gravação da confirmação no banco (chat encerrado)")
+    
+        # Grava no chat e retorna
         gravar_mensagem_chat(
             user_id="ia",
             mensagem=resposta,
@@ -309,7 +332,8 @@ def handle_ia():
         return {"resposta": resposta}, 200
 
 
-    # 4) Confirmação negativa
+
+    # 4) Confirmação negativa (N / não / no / non)
     elif mensagem in ["n", "não", "no", "non"]:
         resposta = "Tranquilo! Qual outro dia e horário funcionam melhor pra você? 😉"
         supabase.table("agendamentos").update({
@@ -318,10 +342,20 @@ def handle_ia():
         }).eq("cod_id", int(agendamento_id)).execute()
         app.logger.info(f"♻️ Reset slots no agendamento {agendamento_id}")
 
-    # 5) Iniciar reagendamento
-    elif mensagem.strip().lower() == "r":
-        # ── se ainda não recebeu o SMS de 3 dias, bloqueia aqui ──
-        if not sms_3dias:
+        # grava & retorna
+        gravar_mensagem_chat(
+            user_id="ia",
+            mensagem=resposta,
+            agendamento_id=agendamento_id
+        )
+        return {"resposta": resposta}, 200
+
+
+    # 5) Iniciar reagendamento (R)
+    elif mensagem == "r":
+        # pega o flag sms_3dias do próprio dados
+        sms3 = dados.get("sms_3dias", False)
+        if not sms3:
             resposta = (
                 "Desculpe, ainda não posso reagendar via IA antes de 3 dias "
                 "do seu agendamento. Se precisar, use o app para reagendar."
@@ -333,27 +367,25 @@ def handle_ia():
                 agendamento_id=agendamento_id
             )
             return {"resposta": resposta}, 200
-    
-        # ── SMS de 3 dias já foi enviado → fluxo original ──
-        resposta = "Claro! Qual e o dia melhor para você?"
+
+        # fluxo normal de reagendamento
+        resposta = "Claro! Qual dia funciona melhor para marcarmos?"
         supabase.table("agendamentos").update({
             "reagendando": True,
-            "nova_data": None,
-            "nova_hora": None,
-            "chat_ativo": True
+            "nova_data":   None,
+            "nova_hora":   None,
+            "chat_ativo":  True
         }).eq("cod_id", int(agendamento_id)).execute()
         app.logger.info(f"♻️ Iniciando reagendamento no agendamento {agendamento_id}")
-    
-        # Grava a resposta e retorna logo em seguida
+
+        # grava & retorna
         gravar_mensagem_chat(
             user_id="ia",
             mensagem=resposta,
             agendamento_id=agendamento_id
         )
         return {"resposta": resposta}, 200
-
-
-
+    
     # 6) Processamento de data/hora informada
     else:
         from datetime import date, time
