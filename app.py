@@ -262,9 +262,11 @@ def handle_ia():
          
     # 1) Busca agendamento atual
     dados = buscar_agendamento(agendamento_id)
+    sms_3dias = dados.get("sms_3dias", False)
     nova_data = None
     nova_hora = None
     resposta = ""
+    
 
     # 2) Intenção: disponibilidade
     if any(k in mensagem for k in ["disponível", "vagas"]):
@@ -384,22 +386,46 @@ def handle_ia():
 
         # 9) Quando não for lembrete, nem reagendamento…
         else:
-            # Se chat_ativo == False, bloqueia qualquer outra intenção
+            # Se chat não estiver ativo, bloqueia qualquer outra intenção
             if not dados.get("chat_ativo"):
                 resposta = (
-                    "Alterar agendamento, somente 3 dias antes da data agendada. Se quiser pode ir na Home e cancelar seu agendamento e fazer outro."
+                    "Alterar agendamento, somente 3 dias antes da data agendada. "
+                    "Se quiser pode ir na Home e cancelar seu agendamento e fazer outro."
                 )
                 app.logger.info("🚫 Bloqueado fallback IA pois chat_ativo=False")
-                gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
+                gravar_mensagem_chat(
+                    user_id="ia",
+                    mensagem=resposta,
+                    agendamento_id=agendamento_id
+                )
                 return {"resposta": resposta}, 200
     
-            # 10) Se estivermos em reagendamento (chat_ativo == True), cai no LLM
-            historico = supabase.table("mensagens_chat") \
-                .select("mensagem,tipo") \
-                .eq("agendamento_id", int(agendamento_id)) \
-                .order("data_envio", desc=False).limit(10).execute().data
+            # Bloqueia fallback IA se ainda não recebeu o SMS de 3 dias
+            if not sms_3dias:
+                resposta = (
+                    "Desculpe, ainda não posso reagendar via IA antes de 3 dias "
+                    "do seu agendamento. Se precisar, use o app para reagendar."
+                )
+                app.logger.info("🚫 Bloqueado fallback IA pois sms_3dias=False")
+                gravar_mensagem_chat(
+                    user_id="ia",
+                    mensagem=resposta,
+                    agendamento_id=agendamento_id
+                )
+                return {"resposta": resposta}, 200
+    
+            # 10) Se estivermos em reagendamento (chat_ativo == True e sms_3dias == True), cai no LLM
+            historico = (
+                supabase.table("mensagens_chat")
+                .select("mensagem,tipo")
+                .eq("agendamento_id", int(agendamento_id))
+                .order("data_envio", desc=False)
+                .limit(10)
+                .execute()
+                .data
+            )
             msgs = [
-                {"role": "assistant" if m['tipo']=='IA' else 'user', "content": m['mensagem']}
+                {"role": "assistant" if m["tipo"] == "IA" else "user", "content": m["mensagem"]}
                 for m in historico
             ]
             msgs.append({"role": "user", "content": mensagem})
@@ -409,6 +435,14 @@ def handle_ia():
             })
             resposta = gerar_resposta_ia(msgs)
             app.logger.info("💬 Fallback IA para reagendamento em curso")
+    
+            gravar_mensagem_chat(
+                user_id="ia",
+                mensagem=resposta,
+                agendamento_id=agendamento_id
+            )
+            return {"resposta": resposta}, 200
+
     
         # 11) Grava e retorna
         gravar_mensagem_chat(user_id="ia", mensagem=resposta, agendamento_id=agendamento_id)
