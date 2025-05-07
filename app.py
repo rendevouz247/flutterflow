@@ -271,7 +271,7 @@ def handle_ia():
     if mensagem in ["y","yes","sim","oui","ok","n","não","no","non","r"] \
        and not dados.get("chat_ativo"):
 
-        outro = supabase.table("agendamentos") \
+        resp = supabase.table("agendamentos") \
             .select("cod_id") \
             .eq("user_id", user_id) \
             .eq("status", "Agendado") \
@@ -280,14 +280,19 @@ def handle_ia():
             .order("date", desc=False) \
             .order("horas", desc=False) \
             .maybe_single() \
-            .execute().data
-
+            .execute()
+    
+        outro = None
+        if resp is not None:
+            outro = resp.data
+    
         if outro and outro.get("cod_id"):
             app.logger.info(
                 f"🔀 Redirecionando de {agendamento_id} para ativo {outro['cod_id']}"
             )
             agendamento_id = outro["cod_id"]
             dados = buscar_agendamento(agendamento_id)
+
         # se não tiver outro ativo, deixamos o fluxo seguir no mesmo agendame
 
     # 2) Intenção: disponibilidade
