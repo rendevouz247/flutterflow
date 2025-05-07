@@ -267,6 +267,28 @@ def handle_ia():
     nova_hora = None
     resposta = ""
     
+    # ← Inserir AQUI o guard de “redirecionamento” ou “continua”:
+    if mensagem in ["y","yes","sim","oui","ok","n","não","no","non","r"] \
+       and not dados.get("chat_ativo"):
+
+        outro = supabase.table("agendamentos") \
+            .select("cod_id") \
+            .eq("user_id", user_id) \
+            .eq("status", "Agendado") \
+            .eq("chat_ativo", True) \
+            .neq("cod_id", int(agendamento_id)) \
+            .order("date", asc=True) \
+            .order("horas", asc=True) \
+            .maybe_single() \
+            .execute().data
+
+        if outro and outro.get("cod_id"):
+            app.logger.info(
+                f"🔀 Redirecionando de {agendamento_id} para ativo {outro['cod_id']}"
+            )
+            agendamento_id = outro["cod_id"]
+            dados = buscar_agendamento(agendamento_id)
+        # se não tiver outro ativo, deixamos o fluxo seguir no mesmo agendame
 
     # 2) Intenção: disponibilidade
     if any(k in mensagem for k in ["disponível", "vagas"]):
